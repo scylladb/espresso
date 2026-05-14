@@ -1,0 +1,130 @@
+# Espresso default key/value profile.
+# Used automatically when no --profile is supplied.
+# Override the target cluster with --nodes http://host:8000
+#
+# Variables can still be overridden from the CLI:
+#   espresso run --nodes http://node1:8000 --var row_count=5000000
+version: 1
+
+vars:
+  row_count: 1000000
+  offset: 0
+  populate_operation_count: 1000000
+
+target:
+  kind: alternator
+  nodes:
+    - http://localhost:8000
+  region: us-east-1
+  auth:
+    access_key: test
+    secret_key: test
+  tls:
+    enabled: false
+
+tables:
+  - name: espresso_kv
+    billing_mode: pay_per_request
+    key_schema:
+      partition_key:
+        name: key
+        type: N
+    attributes:
+      - name: key
+        type: N
+      - name: val
+        type: B
+        size_bytes: 1024
+
+schema:
+  create_if_missing: true
+  delete_if_exists: false
+  apply_to_tables: all
+
+phases:
+  - name: populate
+    mode: operation_count
+    operations: ${vars.populate_operation_count}
+    concurrency: 128
+    warmup: 0s
+    include_in_metrics: false
+    table_operations:
+      - table: espresso_kv
+        mix:
+          put_item: 1.0
+        operation_templates:
+          put_item:
+            item:
+              strategy: generated_from_vars
+              key_field: key
+              value_field: val
+
+  # 100% sequential writes — measures peak write throughput.
+  # espresso run --nodes http://... --phase write_only
+  - name: write_only
+    mode: duration
+    duration: 60s
+    concurrency: 128
+    warmup: 10s
+    include_in_metrics: true
+    table_operations:
+      - table: espresso_kv
+        mix:
+          put_item: 1.0
+        operation_templates:
+          put_item:
+            item:
+              strategy: generated_from_vars
+              key_field: key
+              value_field: val
+
+  # 100% point reads — measures peak read throughput.
+  # espresso run --nodes http://... --phase read_only
+  - name: read_only
+    mode: duration
+    duration: 60s
+    concurrency: 128
+    warmup: 10s
+    include_in_metrics: true
+    table_operations:
+      - table: espresso_kv
+        mix:
+          get_item: 1.0
+        operation_templates:
+          get_item:
+            key:
+              strategy: cached_working_set
+              key_field: key
+              use_vars: true
+
+  # 80% reads / 20% writes — balanced mixed workload (default benchmark).
+  # espresso run --nodes http://... --phase benchmark
+  - name: benchmark
+    mode: duration
+    duration: 60s
+    concurrency: 128
+    warmup: 10s
+    include_in_metrics: true
+    table_operations:
+      - table: espresso_kv
+        mix:
+          get_item: 0.8
+          put_item: 0.2
+        operation_templates:
+          get_item:
+            key:
+              strategy: cached_working_set
+              key_field: key
+              use_vars: true
+          put_item:
+            item:
+              strategy: generated_from_vars
+              key_field: key
+              value_field: val
+
+report:
+  live_progress:
+    enabled: true
+    interval: 1s
+  outputs:
+    text_summary: true

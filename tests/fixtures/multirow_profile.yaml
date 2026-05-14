@@ -1,0 +1,108 @@
+version: 1
+
+vars:
+  row_count: 50000
+  offset: 1
+  rows_per_partition_min: 1
+  rows_per_partition_max: 100
+  sort_key_offset: 1
+  populate_operation_count: 50000
+
+target:
+  kind: alternator
+  nodes:
+    - http://localhost:8000
+    - http://localhost:8001
+    - http://localhost:8002
+  region: us-east-1
+  auth:
+    access_key: test
+    secret_key: test
+  tls:
+    enabled: false
+
+tables:
+  - name: espresso_multirow
+    billing_mode: pay_per_request
+    key_schema:
+      partition_key:
+        name: customer_id
+        type: N
+      sort_key:
+        name: order_ts
+        type: N
+    attributes:
+      - name: customer_id
+        type: N
+      - name: order_ts
+        type: N
+      - name: val
+        type: B
+        size_bytes: 64
+
+schema:
+  create_if_missing: true
+  delete_if_exists: true
+  apply_to_tables: all
+
+phases:
+  - name: populate_multirow
+    mode: operation_count
+    operations: ${vars.populate_operation_count}
+    concurrency: 8
+    warmup: 0s
+    include_in_metrics: true
+    table_operations:
+      - table: espresso_multirow
+        mix:
+          put_item: 1.0
+        operation_templates:
+          put_item:
+            item:
+              strategy: generated_from_vars
+              key_field: customer_id
+              value_field: val
+              use_vars: true
+            sort_key:
+              strategy: uniform
+              key_field: order_ts
+              range: [1, 100]
+
+  - name: run_multirow
+    mode: duration
+    duration: 60s
+    concurrency: 8
+    warmup: 0s
+    include_in_metrics: true
+    table_operations:
+      - table: espresso_multirow
+        mix:
+          get_item: 0.7
+          put_item: 0.3
+        operation_templates:
+          get_item:
+            key:
+              strategy: uniform
+              key_field: customer_id
+              use_vars: true
+            sort_key:
+              strategy: uniform
+              key_field: order_ts
+              range: [1, 100]
+          put_item:
+            item:
+              strategy: generated_from_vars
+              key_field: customer_id
+              value_field: val
+              use_vars: true
+            sort_key:
+              strategy: uniform
+              key_field: order_ts
+              range: [1, 100]
+
+report:
+  live_progress:
+    enabled: true
+    interval: 2s
+  outputs:
+    text_summary: true

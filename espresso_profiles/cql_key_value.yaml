@@ -1,0 +1,88 @@
+version: 1
+
+vars:
+  row_count: 10000000
+  hot_row_count: 0
+  cache_hit_ratio: 80
+  offset: 0
+  populate_operation_count: 1000000
+
+target:
+  kind: cql
+  nodes:
+    - 127.0.0.1:9042
+  cql:
+    keyspace: espresso
+    connections_per_shard: 1
+  auth:
+    access_key: ""
+    secret_key: ""
+
+tables:
+  - name: key_value_cql
+    billing_mode: pay_per_request
+    key_schema:
+      partition_key:
+        name: key
+        type: bigint
+    attributes:
+      - name: key
+        type: bigint
+      - name: val
+        type: blob
+        size_bytes: 512
+
+schema:
+  create_if_missing: true
+  delete_if_exists: false
+  apply_to_tables: all
+
+phases:
+  - name: populate
+    mode: operation_count
+    operations: ${vars.populate_operation_count}
+    concurrency: 256
+    warmup: 0s
+    include_in_metrics: false
+    table_operations:
+      - table: key_value_cql
+        mix:
+          put_item: 1.0
+        operation_templates:
+          put_item:
+            item:
+              strategy: generated_from_vars
+              key_field: key
+              value_field: val
+
+  - name: run_read_heavy
+    mode: duration
+    duration: 60s
+    concurrency: 256
+    warmup: 10s
+    include_in_metrics: true
+    table_operations:
+      - table: key_value_cql
+        mix:
+          get_item: 0.9
+          put_item: 0.1
+        operation_templates:
+          get_item:
+            key:
+              strategy: cached_working_set
+              key_field: key
+              use_vars: true
+          put_item:
+            item:
+              strategy: generated_from_vars
+              key_field: key
+              value_field: val
+
+report:
+  live_progress:
+    enabled: true
+    interval: 1s
+  outputs:
+    text_summary: true
+    json_file: ./results/cql_key_value.json
+    hdr_histogram_file: ./results/cql_key_value.hdr

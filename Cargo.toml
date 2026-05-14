@@ -1,0 +1,46 @@
+[package]
+name = "espresso"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# AWS SDK — DynamoDB client + Smithy endpoint traits
+aws-sdk-dynamodb       = "1"
+aws-smithy-runtime-api = { version = "1", features = ["client"] }
+aws-config             = "1"
+aws-credential-types   = "1"
+
+# Scylla native CQL driver
+scylla = "1.6"
+
+# Async runtime
+tokio       = { version = "=1.44.2", features = ["full"] }
+tokio-util  = { version = "0.7", features = ["codec"] }
+
+# Serialisation / deserialisation
+serde      = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+
+# Random number generation
+rand = { version = "0.8", features = ["small_rng"] }
+
+# Metrics — HDR histogram
+hdrhistogram = "7"
+
+# CLI argument parsing
+clap = { version = "4", features = ["derive"] }
+
+# Error handling
+anyhow = "1"
+
+# Logging / tracing
+tracing            = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# High-performance allocator for benchmark workloads
+jemallocator = "0.5"
+
+[profile.release]
+codegen-units = 1
+lto = true
+panic = "abort"

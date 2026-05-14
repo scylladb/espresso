@@ -1,0 +1,96 @@
+version: 1
+
+# Throttling is controlled via CLI, not in profile YAML:
+#   cargo run -- run --profile tests/fixtures/test_profile.yaml --throttle 2000
+#   cargo run -- run --profile tests/fixtures/test_profile.yaml --throttle 0
+# `--throttle 0` means unlimited (run as fast as possible).
+# Phase selection is also controlled via CLI:
+#   cargo run -- run --profile tests/fixtures/test_profile.yaml --phase populate
+#   cargo run -- run --profile tests/fixtures/test_profile.yaml --phase run_read_heavy
+
+vars:
+  row_count: 100000
+  hot_row_count: 0
+  cache_hit_ratio: 80
+  offset: 0
+  populate_operation_count: 100000
+
+target:
+  kind: alternator
+  nodes:
+    - http://localhost:8000
+    - http://localhost:8001
+    - http://localhost:8002
+  region: us-east-1
+  auth:
+    access_key: test
+    secret_key: test
+  tls:
+    enabled: false
+
+tables:
+  - name: espresso_test
+    billing_mode: pay_per_request
+    key_schema:
+      partition_key:
+        name: key
+        type: N
+    attributes:
+      - name: key
+        type: N
+      - name: val
+        type: B
+        size_bytes: 64
+
+schema:
+  create_if_missing: true
+  delete_if_exists: true
+  apply_to_tables: all
+
+phases:
+  - name: populate
+    mode: operation_count
+    operations: ${vars.populate_operation_count}
+    concurrency: 8
+    warmup: 0s
+    include_in_metrics: true
+    table_operations:
+      - table: espresso_test
+        mix:
+          put_item: 1.0
+        operation_templates:
+          put_item:
+            item:
+              strategy: sequential
+              key_field: key
+              value_field: val
+
+  - name: run_read_heavy
+    mode: duration
+    duration: 120s
+    concurrency: 8
+    warmup: 0s
+    include_in_metrics: true
+    table_operations:
+      - table: espresso_test
+        mix:
+          get_item: 0.7
+          put_item: 0.3
+        operation_templates:
+          get_item:
+            key:
+              strategy: uniform
+              key_field: key
+              use_vars: true
+          put_item:
+            item:
+              strategy: uniform
+              key_field: key
+              value_field: val
+
+report:
+  live_progress:
+    enabled: true
+    interval: 5s
+  outputs:
+    text_summary: true
