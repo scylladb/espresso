@@ -333,7 +333,6 @@ operation_templates:
     keys:
       - strategy: uniform
         key_field: customer_id
-        use_vars: true
 ```
 
 Notes:
@@ -382,7 +381,6 @@ table_operations:
         keys:
           - strategy: cached_working_set
             key_field: customer_id
-            use_vars: true
       batch_write_item:
         items:
           - strategy: generated_from_vars
@@ -488,7 +486,7 @@ value:
 | Key | Type | Required | Notes |
 |---|---|---|---|
 | strategy | string | yes | `cached_working_set` |
-| use_vars | boolean | yes | `true` — reads `row_count`, `hot_row_count`, `cache_hit_ratio` from active vars |
+| vars source | implicit | n/a | Reads `row_count`, `hot_row_count`, `cache_hit_ratio` from active vars automatically |
 
 Expected vars:
 
@@ -507,7 +505,6 @@ Example:
 key:
   field: key
   strategy: cached_working_set
-  use_vars: true
 ```
 
 ## Operation Template Reference
@@ -539,7 +536,7 @@ Path: `phases[].table_operations[].operation_templates.get_item`
 | key.strategy | string | yes | Generator strategy |
 | key.range | [int, int] | yes for sequential/uniform/zipf | Key selection range |
 | key.s | float | yes for zipf | Skew exponent |
-| key.use_vars | boolean | yes for cached_working_set | Reads hot set params from active vars |
+| key vars source | implicit | n/a | For `cached_working_set`, hot set params are read from active vars automatically |
 
 ---
 
@@ -660,7 +657,6 @@ table_operations:
         key:
           strategy: cached_working_set
           key_field: key
-          use_vars: true
       write_by_pk:
         cql_query: "INSERT INTO {table} (key, val) VALUES (?, ?)"
         cql_params: [key, val]

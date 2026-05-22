@@ -60,7 +60,6 @@ phases:
             key:
               strategy: cached_working_set
               key_field: key
-              use_vars: true
           put_item:
             item:
               strategy: generated_from_vars
@@ -164,7 +163,6 @@ phases:
             key:
               strategy: cached_working_set
               key_field: key
-              use_vars: true
           write_by_pk:
             cql_query: "INSERT INTO {table} (key, val) VALUES (?, ?)"
             cql_params: [key, val]
@@ -184,6 +182,13 @@ Notes:
 
 - CQL backend currently supports DynamoDB-equivalent operations:
   - `put_item`, `get_item`, `delete_item`, `update_item`, `batch_get_item`, `batch_write_item`
+- CQL backend also accepts SQL-style aliases for readability:
+  - `insert` -> `put_item`
+  - `select` -> `get_item`
+  - `update` -> `update_item`
+  - `delete` -> `delete_item`
+  - `batch_insert` -> `batch_write_item`
+  - `batch_select` -> `batch_get_item`
 - `query` and `scan` operation templates are documented for Alternator but are not currently implemented in CQL dispatch path.
 - Use `cargo run --release` for benchmark-quality numbers.
 

@@ -25,7 +25,7 @@ use scylla::client::session_builder::SessionBuilder;
 use scylla::policies::load_balancing::DefaultPolicy;
 use tracing::info;
 
-use config::{Profile, TargetKind};
+use config::{AuthConfig, Profile, TargetKind};
 use node_router::NodeRouter;
 use resolver::RoundRobinResolver;
 
@@ -36,15 +36,76 @@ pub enum EspressoClient {
 }
 
 /// Build runtime client from profile target kind.
+/// For Alternator targets with `auth.fetch_salted_hash: true`, connect to
+/// Scylla via CQL, look up the salted hash for the given role from
+/// `system.roles`, and return it as the Alternator secret key.
+async fn resolve_alternator_secret(auth: &AuthConfig, alternator_nodes: &[String]) -> Result<String> {
+    // Derive CQL contact points: use explicit list, else strip HTTP scheme and
+    // replace port with 9042 for each Alternator node.
+    let cql_nodes: Vec<String> = if !auth.cql_contact_points.is_empty() {
+        auth.cql_contact_points.clone()
+    } else {
+        alternator_nodes
+            .iter()
+            .map(|n| {
+                let host = n
+                    .trim_start_matches("https://")
+                    .trim_start_matches("http://")
+                    .split(':')
+                    .next()
+                    .unwrap_or(n);
+                format!("{host}:9042")
+            })
+            .collect()
+    };
+
+    info!(
+        "Fetching salted_hash for role '{}' via CQL at {}",
+        auth.access_key,
+        cql_nodes[0]
+    );
+
+    let session = build_cql_session_from_nodes(
+        &cql_nodes,
+        1,
+        Some((auth.access_key.as_str(), auth.secret_key.as_str())),
+        None,
+    )
+    .await
+    .context("failed to open CQL session for salted_hash lookup")?;
+
+    let result = session
+        .query_unpaged(
+            "SELECT salted_hash FROM system.roles WHERE role = ?",
+            (&auth.access_key,),
+        )
+        .await
+        .context("failed to query system.roles")?;
+
+    let hash: Option<String> = result
+        .into_rows_result()
+        .context("failed to read system.roles rows")?
+        .first_row::<(Option<String>,)>()
+        .context("role not found in system.roles")?
+        .0;
+
+    hash.with_context(|| format!("salted_hash is NULL for role '{}'" , auth.access_key))
+}
+
 pub async fn build_client(profile: &Profile) -> Result<EspressoClient> {
     let t = &profile.target;
     match t.kind {
         TargetKind::Alternator => {
+            let secret_key = if t.auth.fetch_salted_hash {
+                resolve_alternator_secret(&t.auth, &t.nodes).await?
+            } else {
+                t.auth.secret_key.clone()
+            };
             let c = build_alternator_client_from_nodes(
                 &t.nodes,
                 &t.region,
                 &t.auth.access_key,
-                &t.auth.secret_key,
+                &secret_key,
             )
             .await?;
             Ok(EspressoClient::Alternator(c))

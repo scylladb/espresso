@@ -81,7 +81,6 @@ phases:
             key:
               strategy: uniform
               key_field: key
-              use_vars: true
           put_item:
             item:
               strategy: uniform

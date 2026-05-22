@@ -396,6 +396,22 @@ struct OpGen {
     retry_unprocessed_items: bool,
 }
 
+fn canonical_cql_op_name(op: &str) -> &str {
+    match op {
+        "insert" => "put_item",
+        "select" => "get_item",
+        "delete" => "delete_item",
+        "update" => "update_item",
+        "batch_select" => "batch_get_item",
+        "batch_insert" => "batch_write_item",
+        _ => op,
+    }
+}
+
+fn canonical_op_name_for_generator(op: &str) -> &str {
+    canonical_cql_op_name(op)
+}
+
 #[derive(Debug, Clone)]
 struct RetryPolicy {
     max_attempts: u32,
@@ -530,13 +546,15 @@ impl Dispatcher {
                 },
                 EspressoClient::Cql(session) => match op {
                     _ if og.cql_query.is_some() => self.cql_named_query(session, op, og).await,
-                    "put_item" => self.cql_put_item(session, og).await,
-                    "get_item" => self.cql_get_item(session, og).await,
-                    "delete_item" => self.cql_delete_item(session, og).await,
-                    "update_item" => self.cql_update_item(session, og).await,
-                    "batch_get_item" => self.cql_batch_get_item(session, og).await,
-                    "batch_write_item" => self.cql_batch_write_item(session, og).await,
-                    other => bail!("unsupported CQL operation '{other}'"),
+                    _ => match canonical_cql_op_name(op) {
+                        "put_item" => self.cql_put_item(session, og).await,
+                        "get_item" => self.cql_get_item(session, og).await,
+                        "delete_item" => self.cql_delete_item(session, og).await,
+                        "update_item" => self.cql_update_item(session, og).await,
+                        "batch_get_item" => self.cql_batch_get_item(session, og).await,
+                        "batch_write_item" => self.cql_batch_write_item(session, og).await,
+                        other => bail!("unsupported CQL operation '{other}'"),
+                    },
                 },
             }
         })
@@ -1254,6 +1272,7 @@ fn build_sort_key_gen(
     if !has_sort_key {
         return (None, None, None);
     }
+    let op_name = canonical_op_name_for_generator(op_name);
     let base_cfg = match op_name {
         "put_item" | "update_item" => tmpl.item.as_ref(),
         "get_item" | "delete_item" => tmpl.key.as_ref(),
@@ -1304,6 +1323,7 @@ fn build_op_gen(
     op_name: &str,
     vars: &ResolvedVars,
 ) -> Result<OpGen> {
+    let op_name = canonical_op_name_for_generator(op_name);
     // Determine the relevant generator config (key or item depending on op).
     let gen_cfg = match op_name {
         "put_item" | "update_item" | "batch_write_item" => tmpl

@@ -203,10 +203,11 @@ fn to_scalar_type(t: AttributeType) -> ScalarAttributeType {
 pub async fn apply_cql(
     session: &Session,
     keyspace: &str,
+    cql_cfg: &crate::config::CqlConfig,
     tables: &[TableDef],
     schema: &SchemaConfig,
 ) -> Result<()> {
-    ensure_keyspace(session, keyspace).await?;
+    ensure_keyspace(session, keyspace, cql_cfg).await?;
 
     let target_tables: Vec<&TableDef> = match &schema.apply_to_tables {
         ApplyToTables::All(_) => tables.iter().collect(),
@@ -241,10 +242,31 @@ pub async fn apply_cql(
     Ok(())
 }
 
-async fn ensure_keyspace(session: &Session, keyspace: &str) -> Result<()> {
-    let cql = format!(
-        "CREATE KEYSPACE IF NOT EXISTS {keyspace} WITH replication = {{'class': 'SimpleStrategy', 'replication_factor': 1}}"
+async fn ensure_keyspace(
+    session: &Session,
+    keyspace: &str,
+    cql_cfg: &crate::config::CqlConfig,
+) -> Result<()> {
+    let mut cql = format!(
+        "CREATE KEYSPACE IF NOT EXISTS {keyspace} WITH replication = {{'class': 'NetworkTopologyStrategy', 'replication_factor': {}}}",
+        cql_cfg.replication_factor
     );
+
+    if let Some(enabled) = cql_cfg.tablets_enabled {
+        if let Some(initial) = cql_cfg.tablets_initial {
+            cql.push_str(&format!(
+                " AND tablets = {{'enabled': {}, 'initial': {}}}",
+                if enabled { "true" } else { "false" },
+                initial
+            ));
+        } else {
+            cql.push_str(&format!(
+                " AND tablets = {{'enabled': {}}}",
+                if enabled { "true" } else { "false" }
+            ));
+        }
+    }
+
     session
         .query_unpaged(cql, ())
         .await

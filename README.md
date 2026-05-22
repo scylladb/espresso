@@ -322,10 +322,8 @@ phases:
             keys:
               - strategy: uniform
                 key_field: customer_id
-                use_vars: true
               - strategy: uniform
                 key_field: order_ts
-                use_vars: true
           batch_write_item:
             items:
               - strategy: generated_from_vars

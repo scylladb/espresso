@@ -62,7 +62,6 @@ phases:
               strategy: generated_from_vars
               key_field: customer_id
               value_field: val
-              use_vars: true
             sort_key:
               strategy: uniform
               key_field: order_ts
@@ -84,7 +83,6 @@ phases:
             key:
               strategy: uniform
               key_field: customer_id
-              use_vars: true
             sort_key:
               strategy: uniform
               key_field: order_ts
@@ -94,7 +92,6 @@ phases:
               strategy: generated_from_vars
               key_field: customer_id
               value_field: val
-              use_vars: true
             sort_key:
               strategy: uniform
               key_field: order_ts

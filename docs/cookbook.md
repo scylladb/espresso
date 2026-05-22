@@ -335,7 +335,6 @@ phases:
             key:
               field: key
               strategy: cached_working_set
-              use_vars: true
           put_item:
             item:
               key:
