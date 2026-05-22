@@ -55,10 +55,15 @@ Conventionally used vars in examples:
 | region | string | no | Alternator region string. Default: `us-east-1`. |
 | auth.access_key | string | no | Optional for both backends. For CQL, used as username when non-empty. |
 | auth.secret_key | string | no | Optional for both backends. For CQL, used as password when access_key is non-empty. |
+| auth.fetch_salted_hash | boolean | no | Alternator only. When `true`, espresso opens a CQL connection, reads the `salted_hash` for the role named by `access_key` from `system.roles`, and uses that hash as the Alternator secret key. Required for ScyllaDB Cloud clusters where the Alternator secret key is the internal role password hash, not the plaintext CQL password. Default: `false`. |
+| auth.cql_contact_points | list of strings | no | CQL contact points used only for `fetch_salted_hash` lookups. Defaults to the Alternator node addresses with port `9042` substituted. |
 | tls.enabled | boolean | no | Default: `false` |
 | cql.keyspace | string | no | CQL keyspace name. Default: `espresso`. |
 | cql.connections_per_shard | integer | no | Native CQL connections per shard. Default: `1`. |
 | cql.local_dc | string | no | Optional local datacenter preference for token-aware routing. |
+| cql.replication_factor | integer | no | Replication factor for the keyspace created by espresso. Default: `1`. |
+| cql.tablets_enabled | boolean | no | When set, adds `AND tablets = {'enabled': true/false}` to the `CREATE KEYSPACE` statement. Omitted from DDL if not set. |
+| cql.tablets_initial | integer | no | Initial tablet count. Only used when `tablets_enabled` is also set. |
 
 Backend notes:
 - Use `kind: alternator` for DynamoDB-compatible HTTP workloads.
@@ -333,7 +338,6 @@ operation_templates:
     keys:
       - strategy: uniform
         key_field: customer_id
-        use_vars: true
 ```
 
 Notes:
@@ -382,7 +386,6 @@ table_operations:
         keys:
           - strategy: cached_working_set
             key_field: customer_id
-            use_vars: true
       batch_write_item:
         items:
           - strategy: generated_from_vars
@@ -488,7 +491,7 @@ value:
 | Key | Type | Required | Notes |
 |---|---|---|---|
 | strategy | string | yes | `cached_working_set` |
-| use_vars | boolean | yes | `true` — reads `row_count`, `hot_row_count`, `cache_hit_ratio` from active vars |
+| vars source | implicit | n/a | Reads `row_count`, `hot_row_count`, `cache_hit_ratio` from active vars automatically |
 
 Expected vars:
 
@@ -507,10 +510,46 @@ Example:
 key:
   field: key
   strategy: cached_working_set
-  use_vars: true
 ```
 
+---
+
+### generated_from_vars (alias: auto)
+
+| Key | Type | Required | Notes |
+|---|---|---|---|
+| strategy | string | yes | `generated_from_vars` or `auto` |
+| key_field | string | yes for key generators | Attribute name of the key field |
+| value_field | string | yes for value generators | Attribute name of the value field |
+
+Behavior: derives key and value generator parameters (`row_count`, `offset`, `size_bytes`, etc.) from the active phase vars at runtime. The `auto` alias is the short form and is equivalent to `generated_from_vars`.
+
+Use when: populating tables where the key range and value size are controlled by `--var` overrides at the command line, or in multi-phase profiles where populate and run phases share the same row count variable.
+
+Example:
+```yaml
+item:
+  strategy: auto          # alias for generated_from_vars
+  key_field: key
+  value_field: val
+```
+
+The vars `row_count`, `offset`, and `size_bytes` (from the table attribute definition) are resolved automatically. Use `--var row_count=<N>` at runtime to control the key range.
+
 ## Operation Template Reference
+
+> **CQL operation name aliases:** When using `kind: cql`, operation template names accept SQL-style aliases in addition to the DynamoDB names:
+> 
+> | Alias | DynamoDB name |
+> |---|---|
+> | `insert` | `put_item` |
+> | `select` | `get_item` |
+> | `update` | `update_item` |
+> | `delete` | `delete_item` |
+> | `batch_insert` | `batch_write_item` |
+> | `batch_select` | `batch_get_item` |
+> 
+> Both names can be used interchangeably in `mix` weights and `operation_templates` keys for CQL profiles. Alternator profiles must use the DynamoDB names.
 
 ### put_item
 
@@ -539,7 +578,7 @@ Path: `phases[].table_operations[].operation_templates.get_item`
 | key.strategy | string | yes | Generator strategy |
 | key.range | [int, int] | yes for sequential/uniform/zipf | Key selection range |
 | key.s | float | yes for zipf | Skew exponent |
-| key.use_vars | boolean | yes for cached_working_set | Reads hot set params from active vars |
+| key vars source | implicit | n/a | For `cached_working_set`, hot set params are read from active vars automatically |
 
 ---
 
@@ -660,7 +699,6 @@ table_operations:
         key:
           strategy: cached_working_set
           key_field: key
-          use_vars: true
       write_by_pk:
         cql_query: "INSERT INTO {table} (key, val) VALUES (?, ?)"
         cql_params: [key, val]

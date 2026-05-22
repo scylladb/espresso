@@ -225,6 +225,7 @@ async fn main() -> Result<()> {
                     schema::apply_cql(
                         s,
                         &profile.target.cql.keyspace,
+                        &profile.target.cql,
                         &profile.tables,
                         &profile.schema,
                     )
@@ -318,6 +319,7 @@ async fn main() -> Result<()> {
                     schema::apply_cql(
                         s,
                         &profile.target.cql.keyspace,
+                        &profile.target.cql,
                         &profile.tables,
                         &profile.schema,
                     )

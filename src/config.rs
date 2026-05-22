@@ -87,6 +87,20 @@ pub struct AuthConfig {
     pub access_key: String,
     #[serde(default)]
     pub secret_key: String,
+    /// When `true`, Espresso connects to Scylla via CQL using `access_key` /
+    /// `secret_key` as CQL credentials and fetches the `salted_hash` from
+    /// `system.roles` for the role matching `access_key`.  That hash is then
+    /// used as the actual Alternator `secret_key`.
+    ///
+    /// Required for ScyllaDB Cloud clusters where Alternator authentication
+    /// uses the internal role password hash rather than the plaintext CQL
+    /// password.
+    #[serde(default)]
+    pub fetch_salted_hash: bool,
+    /// CQL contact point(s) used only for `fetch_salted_hash` lookups.
+    /// Defaults to the first Alternator node with port 9042 if not set.
+    #[serde(default)]
+    pub cql_contact_points: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -103,6 +117,12 @@ pub struct CqlConfig {
     pub connections_per_shard: usize,
     #[serde(default)]
     pub local_dc: Option<String>,
+    #[serde(default = "default_cql_replication_factor")]
+    pub replication_factor: u32,
+    #[serde(default)]
+    pub tablets_enabled: Option<bool>,
+    #[serde(default)]
+    pub tablets_initial: Option<u32>,
 }
 
 impl Default for CqlConfig {
@@ -111,8 +131,15 @@ impl Default for CqlConfig {
             keyspace: default_keyspace(),
             connections_per_shard: default_connections_per_shard(),
             local_dc: None,
+            replication_factor: default_cql_replication_factor(),
+            tablets_enabled: None,
+            tablets_initial: None,
         }
     }
+}
+
+fn default_cql_replication_factor() -> u32 {
+    1
 }
 
 // ── Tables ────────────────────────────────────────────────────────────────────
@@ -373,10 +400,6 @@ pub struct Generator {
     /// Which attribute in the item holds the value (for put-style ops).
     pub value_field: Option<String>,
 
-    /// When `true`, use `row_count` / `offset` etc. from the resolved vars.
-    #[serde(default)]
-    pub use_vars: bool,
-
     // ---- strategy-specific options ----
     /// `zipf` θ skew parameter (0 < θ < 1, default 0.99).
     pub theta: Option<f64>,
@@ -407,6 +430,7 @@ pub struct Generator {
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum GeneratorStrategy {
+    #[serde(alias = "auto")]
     GeneratedFromVars,
     Sequential,
     Uniform,
