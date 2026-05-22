@@ -8,6 +8,7 @@ Espresso CQL backend uses the Scylla Rust driver with:
 - Per-shard connection pools (`connections_per_shard`)
 - Token-aware routing
 - Optional local datacenter preference (`local_dc`)
+- Configurable keyspace replication factor and tablet settings
 - Prepared statement caching per dispatcher
 - Shared runtime engine (same phases/throttle/metrics model as Alternator)
 
@@ -101,6 +102,8 @@ These apply equally to CQL and Alternator:
 
 For CQL specifically:
 - `target.cql.connections_per_shard` controls driver connections opened per shard.
+- `target.cql.replication_factor` sets the replication factor for the keyspace espresso creates (default `1`).
+- `target.cql.tablets_enabled` / `target.cql.tablets_initial` control tablet settings for the keyspace (omitted from DDL if not set).
 - Total in-flight requests ≈ `phase.concurrency` (same knob as Alternator).
 
 Example:
@@ -191,6 +194,31 @@ Notes:
   - `batch_select` -> `batch_get_item`
 - `query` and `scan` operation templates are documented for Alternator but are not currently implemented in CQL dispatch path.
 - Use `cargo run --release` for benchmark-quality numbers.
+
+## ScyllaDB Cloud Alternator Authentication
+
+ScyllaDB Cloud clusters authenticate Alternator requests using the **salted password hash** stored in `system.roles`, not the plaintext CQL password. To use espresso against a ScyllaDB Cloud Alternator endpoint, set `auth.fetch_salted_hash: true`.
+
+When enabled, espresso:
+1. Opens a CQL connection to the cluster using `access_key`/`secret_key` as CQL credentials.
+2. Reads `salted_hash` from `system.roles` for the matching role.
+3. Uses that hash as the Alternator `X-Amz-Security-Token` / secret key for all HTTP requests.
+
+```yaml
+target:
+  kind: alternator
+  nodes:
+    - https://node1.scylladb.cloud:8043
+  auth:
+    access_key: my-user
+    secret_key: my-plaintext-password
+    fetch_salted_hash: true
+    # Optional: explicit CQL contact points (defaults to Alternator nodes with port 9042)
+    cql_contact_points:
+      - node1.scylladb.cloud:9142
+```
+
+If `cql_contact_points` is omitted, espresso derives CQL addresses by stripping the HTTP scheme from each Alternator node URL and substituting port `9042`.
 
 ## Related Docs
 
