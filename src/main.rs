@@ -226,6 +226,10 @@ async fn main() -> Result<()> {
                 EspressoClient::Alternator(c) => {
                     schema::apply(c, &profile.tables, &profile.schema).await?
                 }
+                EspressoClient::AlternatorNodeAffinity(cs) => {
+                    let c = cs.first().context("node_affinity has no alternator clients")?;
+                    schema::apply(c, &profile.tables, &profile.schema).await?
+                }
                 EspressoClient::Cql(s) => {
                     schema::apply_cql(
                         s,
@@ -327,6 +331,10 @@ async fn main() -> Result<()> {
             let client = build_client(&profile).await?;
             match &client {
                 EspressoClient::Alternator(c) => {
+                    schema::apply(c, &profile.tables, &profile.schema).await?
+                }
+                EspressoClient::AlternatorNodeAffinity(cs) => {
+                    let c = cs.first().context("node_affinity has no alternator clients")?;
                     schema::apply(c, &profile.tables, &profile.schema).await?
                 }
                 EspressoClient::Cql(s) => {

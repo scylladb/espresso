@@ -53,6 +53,7 @@ Conventionally used vars in examples:
 | kind | string | yes | `alternator` or `cql` |
 | nodes | list of strings | yes | Alternator: URL list (for example `http://node1:8000`). CQL: host:port list (for example `node1:9042`). |
 | region | string | no | Alternator region string. Default: `us-east-1`. |
+| node_execution_mode | string | no | Alternator only. `round_robin` (default) or `node_affinity`. `node_affinity` pins workers to endpoint clients for stronger per-node fanout. |
 | auth.access_key | string | no | Optional for both backends. For CQL, used as username when non-empty. |
 | auth.secret_key | string | no | Optional for both backends. For CQL, used as password when access_key is non-empty. |
 | auth.fetch_salted_hash | boolean | no | Alternator only. When `true`, espresso opens a CQL connection, reads the `salted_hash` for the role named by `access_key` from `system.roles`, and uses that hash as the Alternator secret key. Required for ScyllaDB Cloud clusters where the Alternator secret key is the internal role password hash, not the plaintext CQL password. Default: `false`. |
@@ -116,10 +117,14 @@ List of phase objects, executed in order. Each phase:
 | mode | string | yes | `duration` or `operation_count` |
 | duration | string | if mode=duration | Duration string, e.g. `60s`, `5m` |
 | operations | integer | if mode=operation_count | Total operation count. Accepts `${vars.*}`. |
-| concurrency | integer | yes | Number of concurrent workers |
+| threads | integer | yes | Worker task count |
+| concurrency | integer | yes | Per-worker in-flight requests |
 | warmup | string | no | Duration excluded from metrics. e.g. `10s` |
 | include_in_metrics | boolean | yes | Set `false` for populate phases |
 | table_operations | list | yes | Per-table operation configuration |
+
+Concurrency model:
+- Effective parallelism is approximately `threads * concurrency`.
 
 ---
 
@@ -143,6 +148,7 @@ Some execution controls are CLI-only and are not stored in the profile.
 
 | CLI option | Type | Description |
 |---|---|---|
+| `--threads` | integer | Overrides `phase.threads` for all selected phases |
 | `--concurrency` | integer | Overrides `phase.concurrency` for all selected phases |
 | `--phase` | string | Runs only the named phase |
 | `--var KEY=VALUE` | repeatable | Overrides values in top-level `vars` |

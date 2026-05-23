@@ -16,6 +16,7 @@ target:
   nodes:
     - http://localhost:8000
   region: us-east-1
+  node_execution_mode: round_robin
   auth:
     access_key: test
     secret_key: test

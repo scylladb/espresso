@@ -104,7 +104,7 @@ For CQL specifically:
 - `target.cql.connections_per_shard` controls driver connections opened per shard.
 - `target.cql.replication_factor` sets the replication factor for the keyspace espresso creates (default `1`).
 - `target.cql.tablets_enabled` / `target.cql.tablets_initial` control tablet settings for the keyspace (omitted from DDL if not set).
-- Total in-flight requests ≈ `phase.concurrency` (same knob as Alternator).
+- Total in-flight requests are approximately `phase.threads * phase.concurrency` (same model as Alternator).
 
 Example:
 

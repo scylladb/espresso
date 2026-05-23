@@ -26,7 +26,7 @@ Espresso now supports both backends:
 
 - **Workload execution** — run configurable read/write/mixed workloads against Alternator
 - **Async, high-concurrency** — Tokio-based async runtime, tunable concurrency level
-- **Multi-node targeting** — round-robin across all Alternator nodes for even load distribution
+- **Multi-node targeting** — `round_robin` (per-request) or `node_affinity` (per-worker pinned) across Alternator nodes
 - **Connection pooling** — per-node HTTP connection reuse via `hyper` keep-alive
 
 ### Workload Operations
@@ -263,6 +263,27 @@ Adaptive p99 notes:
 Phase notes:
 - `--phase <name>` runs only the matching phase from the profile.
 - If omitted, espresso runs all phases in order.
+
+## Execution Model Notes
+
+For each phase:
+- `threads` controls worker task count.
+- `concurrency` controls per-worker in-flight requests.
+- Effective parallelism is approximately `threads * concurrency`.
+
+Alternator target execution mode:
+
+```yaml
+target:
+  kind: alternator
+  nodes:
+    - http://node1:8000
+    - http://node2:8000
+  node_execution_mode: node_affinity  # round_robin | node_affinity
+```
+
+- `round_robin`: each request selects the next endpoint.
+- `node_affinity`: each worker uses one endpoint chosen by `worker_id % node_count`.
 
 ## Composite Key and Batch Setup
 

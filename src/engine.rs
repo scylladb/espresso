@@ -191,7 +191,7 @@ pub async fn run_phase(
                     None => Instant::now(),
                 };
 
-                let result = dispatcher.execute(&client, &op_name).await;
+                let result = dispatcher.execute(&client, &op_name, worker_id).await;
                 let elapsed = Instant::now().saturating_duration_since(scheduled_at);
 
                 let recording = include && Instant::now() >= warmup_end;
@@ -533,7 +533,7 @@ impl Dispatcher {
         self.op_weights.last().unwrap().0.clone()
     }
 
-    async fn execute(&self, client: &EspressoClient, op: &str) -> Result<()> {
+    async fn execute(&self, client: &EspressoClient, op: &str, worker_id: usize) -> Result<()> {
         let og = self.op_gens.get(op).context("missing op generator")?;
         self.execute_with_retry(op, &og.retry, || async {
             match client {
@@ -546,6 +546,19 @@ impl Dispatcher {
                     "batch_write_item" => self.batch_write_item(c, og).await,
                     other => bail!("unsupported operation '{other}'"),
                 },
+                EspressoClient::AlternatorNodeAffinity(clients) => {
+                    let idx = worker_id % clients.len();
+                    let c = &clients[idx];
+                    match op {
+                        "put_item" => self.put_item(c, og).await,
+                        "get_item" => self.get_item(c, og).await,
+                        "delete_item" => self.delete_item(c, og).await,
+                        "update_item" => self.update_item(c, og).await,
+                        "batch_get_item" => self.batch_get_item(c, og).await,
+                        "batch_write_item" => self.batch_write_item(c, og).await,
+                        other => bail!("unsupported operation '{other}'"),
+                    }
+                }
                 EspressoClient::Cql(session) => match op {
                     _ if og.cql_query.is_some() => self.cql_named_query(session, op, og).await,
                     _ => match canonical_cql_op_name(op) {

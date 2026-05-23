@@ -66,6 +66,8 @@ pub struct Target {
     pub nodes: Vec<String>,
     #[serde(default = "default_region")]
     pub region: String,
+    #[serde(default = "default_node_execution_mode")]
+    pub node_execution_mode: NodeExecutionMode,
     #[serde(default)]
     pub auth: AuthConfig,
     #[serde(default)]
@@ -79,6 +81,13 @@ pub struct Target {
 pub enum TargetKind {
     Alternator,
     Cql,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum NodeExecutionMode {
+    RoundRobin,
+    NodeAffinity,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -491,6 +500,10 @@ fn default_one_u32() -> u32 {
 
 fn default_region() -> String {
     "us-east-1".to_string()
+}
+
+fn default_node_execution_mode() -> NodeExecutionMode {
+    NodeExecutionMode::RoundRobin
 }
 
 fn default_keyspace() -> String {
