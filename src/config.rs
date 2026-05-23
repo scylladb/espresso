@@ -273,6 +273,12 @@ pub struct Phase {
     /// May be a var reference such as `${vars.populate_operation_count}`.
     pub operations: Option<NumOrVarRef>,
 
+    /// Number of worker tasks.
+    #[serde(default = "default_one_u32")]
+    pub threads: u32,
+
+    /// Per-thread in-flight request concurrency.
+    #[serde(default = "default_one_u32")]
     pub concurrency: u32,
 
     /// Warm-up period before metrics are collected (e.g. `"10s"`, `"0s"`).
@@ -477,6 +483,10 @@ pub struct CompatibilityConfig {
 
 fn default_true() -> bool {
     true
+}
+
+fn default_one_u32() -> u32 {
+    1
 }
 
 fn default_region() -> String {

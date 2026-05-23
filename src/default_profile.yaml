@@ -45,6 +45,7 @@ phases:
   - name: populate
     mode: operation_count
     operations: ${vars.populate_operation_count}
+    threads: 1
     concurrency: 128
     warmup: 0s
     include_in_metrics: false
@@ -64,6 +65,7 @@ phases:
   - name: write_only
     mode: duration
     duration: 60s
+    threads: 1
     concurrency: 128
     warmup: 10s
     include_in_metrics: true
@@ -83,6 +85,7 @@ phases:
   - name: read_only
     mode: duration
     duration: 60s
+    threads: 1
     concurrency: 128
     warmup: 10s
     include_in_metrics: true
@@ -101,6 +104,7 @@ phases:
   - name: benchmark
     mode: duration
     duration: 60s
+    threads: 1
     concurrency: 128
     warmup: 10s
     include_in_metrics: true

@@ -58,7 +58,11 @@ enum Commands {
         #[arg(long, value_name = "KEY=VALUE")]
         var: Vec<String>,
 
-        /// Override concurrency for all phases.
+        /// Override worker thread count for all phases.
+        #[arg(long)]
+        threads: Option<u32>,
+
+        /// Override per-thread in-flight request concurrency for all phases.
         #[arg(long)]
         concurrency: Option<u32>,
 
@@ -125,6 +129,7 @@ async fn main() -> Result<()> {
             rows,
             duration: duration_override,
             var,
+            threads,
             concurrency,
             throttle,
             throttle_sine_amplitude,
@@ -241,13 +246,22 @@ async fn main() -> Result<()> {
                 }
 
                 let mut phase = phase.clone();
+                if let Some(t) = threads {
+                    phase.threads = t.max(1);
+                }
                 if let Some(c) = concurrency {
-                    phase.concurrency = c;
+                    phase.concurrency = c.max(1);
                 }
 
                 info!(
-                    "Starting phase '{}' (mode={:?}, concurrency={}, throttle={:?} ops/s, target_p99_ms={:?})",
-                    phase.name, phase.mode, phase.concurrency, throttle, target_p99_ms
+                    "Starting phase '{}' (mode={:?}, threads={}, concurrency={}, effective_concurrency={}, throttle={:?} ops/s, target_p99_ms={:?})",
+                    phase.name,
+                    phase.mode,
+                    phase.threads,
+                    phase.concurrency,
+                    phase.threads.saturating_mul(phase.concurrency.max(1)),
+                    throttle,
+                    target_p99_ms
                 );
 
                 // Create one Metrics instance; share it between LiveProgress

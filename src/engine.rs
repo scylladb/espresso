@@ -108,7 +108,9 @@ pub async fn run_phase(
     let warmup_dur = parse_duration(&phase.warmup).unwrap_or(Duration::ZERO);
 
     // Spawn worker tasks.
-    let effective_concurrency = phase.concurrency;
+    let effective_concurrency = phase
+        .threads
+        .saturating_mul(phase.concurrency.max(1));
     let concurrency = effective_concurrency as usize;
     let mut join_set = JoinSet::new();
     let adaptive_default_rate = effective_concurrency.max(1) * 100;
