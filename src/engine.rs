@@ -1395,20 +1395,24 @@ fn build_op_gen(
     .max(1)
     .min(100);
 
+    // Preferred names are sort_key_window_*; keep legacy aliases for compatibility.
     let rows_per_partition_fixed = vars
-        .get("rows_per_partition")
+        .get("sort_key_window_size")
+        .or_else(|| vars.get("rows_per_partition"))
         .or_else(|| vars.get("sort_key_rows_per_partition"))
         .and_then(|v| u64::try_from(*v).ok())
         .filter(|v| *v > 0);
 
     let rows_per_partition_min = vars
-        .get("rows_per_partition_min")
+        .get("sort_key_window_min")
+        .or_else(|| vars.get("rows_per_partition_min"))
         .or_else(|| vars.get("sort_key_rows_per_partition_min"))
         .and_then(|v| u64::try_from(*v).ok())
         .filter(|v| *v > 0);
 
     let rows_per_partition_max = vars
-        .get("rows_per_partition_max")
+        .get("sort_key_window_max")
+        .or_else(|| vars.get("rows_per_partition_max"))
         .or_else(|| vars.get("sort_key_rows_per_partition_max"))
         .and_then(|v| u64::try_from(*v).ok())
         .filter(|v| *v > 0);

@@ -233,16 +233,76 @@ Sort key generation:
 
 Rows-per-partition controls (PK+SK tables):
 
-| Var | Type | Behavior |
+| Option | Type | Behavior |
 |---|---|---|
-| `rows_per_partition` | integer > 0 | Fixed sort-key rows per partition |
-| `rows_per_partition_min` + `rows_per_partition_max` | integers > 0 | Randomized rows per partition within inclusive range |
+| `sort_key_window_size` | integer > 0 | Fixed sort-key window size per partition (preferred) |
+| `sort_key_window_min` + `sort_key_window_max` | integers > 0 | Variable sort-key window size per partition (preferred) |
+| `rows_per_partition` | integer > 0 | Legacy alias of `sort_key_window_size` |
+| `rows_per_partition_min` + `rows_per_partition_max` | integers > 0 | Legacy aliases of `sort_key_window_min/max` |
+| `sort_key_rows_per_partition` | integer > 0 | Legacy alias of `sort_key_window_size` |
+| `sort_key_rows_per_partition_min` + `sort_key_rows_per_partition_max` | integers > 0 | Legacy aliases of `sort_key_window_min/max` |
 
 Notes:
-- If `rows_per_partition` is set, it takes precedence.
+- Fixed-size settings take precedence over range settings.
+- Precedence for fixed size: `sort_key_window_size` -> `rows_per_partition` -> `sort_key_rows_per_partition`.
+- Precedence for range: `sort_key_window_min/max` -> `rows_per_partition_min/max` -> `sort_key_rows_per_partition_min/max`.
 - If min/max are set, Espresso computes a stable per-partition value in `[min, max]`.
 - This allows uneven partition sizes (for example some partitions with 5 rows, others with 90).
 - These values define the active logical sort-key window per partition; exact on-disk uniqueness depends on generator strategy and write mix.
+
+Important clarification:
+- `sort_key_window_min/max` defines logical window capacity (possible sort-key slots), not guaranteed persisted row count.
+- Example: with `sort_key_window_min: 500` and `sort_key_window_max: 1000`, a partition gets between 500 and 1000 possible sort-key slots.
+- You only get 500+ stored rows in that partition if populate writes enough unique `PK + SK` pairs into those slots.
+- Repeated writes to the same `PK + SK` overwrite existing items and do not increase row count.
+
+Available definitions:
+
+Fixed window (all partitions same size):
+
+```yaml
+vars:
+  sort_key_window_size: 35
+```
+
+Equivalent legacy alias forms:
+
+```yaml
+vars:
+  rows_per_partition: 35
+  # or
+  sort_key_rows_per_partition: 35
+```
+
+Variable window (stable per partition, bounded range):
+
+```yaml
+vars:
+  sort_key_window_min: 1
+  sort_key_window_max: 100
+```
+
+Equivalent legacy alias forms:
+
+```yaml
+vars:
+  rows_per_partition_min: 1
+  rows_per_partition_max: 100
+  # or
+  sort_key_rows_per_partition_min: 1
+  sort_key_rows_per_partition_max: 100
+```
+
+CLI overrides:
+
+```bash
+# Fixed size per partition
+espresso run --profile <profile.yaml> --var sort_key_window_size=35
+
+# Bounded variable size per partition
+espresso run --profile <profile.yaml> \
+  --var sort_key_window_min=1 --var sort_key_window_max=100
+```
 
 Simple bounded key syntax:
 - Generators support `range: [min, max]` (inclusive).
@@ -317,8 +377,8 @@ Example:
 
 ```yaml
 vars:
-  rows_per_partition_min: 1
-  rows_per_partition_max: 100
+  sort_key_window_min: 1
+  sort_key_window_max: 100
 
 operation_templates:
   get_item:

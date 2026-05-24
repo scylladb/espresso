@@ -5,6 +5,7 @@ This directory contains detailed configuration guides for espresso workloads acr
 ## Core Reference
 
 - [Profile Configuration Reference](config-reference.md)
+- [Multi-Row Partition Options](config-reference.md#composite-key-pk--sk-tables)
 - [Profile Cookbook](cookbook.md)
 - [CQL Backend Guide](cql-backend.md)
 
