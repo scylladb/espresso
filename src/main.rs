@@ -45,8 +45,8 @@ enum Commands {
         #[arg(long, value_delimiter = ',')]
         nodes: Vec<String>,
 
-        /// Number of rows to write during populate/write phases.
-        /// Sets both `row_count` and `populate_operation_count` in vars.
+        /// Number of partitions to target during populate/write phases.
+        /// Sets both `partition_count` and `populate_operation_count` in vars.
         #[arg(long)]
         rows: Option<u64>,
 
@@ -54,7 +54,7 @@ enum Commands {
         #[arg(long, value_name = "DURATION")]
         duration: Option<String>,
 
-        /// Override a profile variable: --var row_count=500000
+        /// Override a profile variable: --var partition_count=500000
         #[arg(long, value_name = "KEY=VALUE")]
         var: Vec<String>,
 
@@ -157,17 +157,17 @@ async fn main() -> Result<()> {
                 profile.target.nodes = nodes.clone();
             }
 
-            // --rows sets row_count and populate_operation_count together.
+            // --rows sets partition_count and populate_operation_count together.
             if let Some(n) = rows {
                 profile.vars.insert(
-                    "row_count".to_string(),
+                    "partition_count".to_string(),
                     serde_yaml::Value::Number(serde_yaml::Number::from(n)),
                 );
                 profile.vars.insert(
                     "populate_operation_count".to_string(),
                     serde_yaml::Value::Number(serde_yaml::Number::from(n)),
                 );
-                info!("--rows {n}: set row_count and populate_operation_count to {n}");
+                info!("--rows {n}: set partition_count and populate_operation_count to {n}");
             }
 
             // --duration overrides phase.duration for all duration-mode phases.

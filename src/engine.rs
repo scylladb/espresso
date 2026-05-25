@@ -1310,15 +1310,15 @@ fn build_partition_key_gen(
     if let Some(cfg) = gen_cfg {
         if cfg.strategy == GeneratorStrategy::CachedWorkingSet {
             let hit_ratio = vars.get("cache_hit_ratio").copied().unwrap_or(80) as f64 / 100.0;
-            let row_count = vars.get("row_count").copied().unwrap_or(1_000_000);
+            let partition_count = vars.get("partition_count").copied().unwrap_or(1_000_000);
             let offset = vars.get("offset").copied().unwrap_or(0);
-            let hot_count = vars.get("hot_row_count").copied().unwrap_or(0);
+            let hot_count = vars.get("hot_partition_count").copied().unwrap_or(0);
             let capacity = if hot_count > 0 {
                 hot_count as usize
             } else {
-                (row_count as f64 * hit_ratio).ceil() as usize + 1
+                (partition_count as f64 * hit_ratio).ceil() as usize + 1
             };
-            let fallback = KeyGen::uniform(offset, offset + row_count);
+            let fallback = KeyGen::uniform(offset, offset + partition_count);
             return (
                 None,
                 Some(CachedWorkingSet::new(capacity, hit_ratio, fallback)),
@@ -1395,25 +1395,18 @@ fn build_op_gen(
     .max(1)
     .min(100);
 
-    // Preferred names are sort_key_window_*; keep legacy aliases for compatibility.
     let rows_per_partition_fixed = vars
         .get("sort_key_window_size")
-        .or_else(|| vars.get("rows_per_partition"))
-        .or_else(|| vars.get("sort_key_rows_per_partition"))
         .and_then(|v| u64::try_from(*v).ok())
         .filter(|v| *v > 0);
 
     let rows_per_partition_min = vars
         .get("sort_key_window_min")
-        .or_else(|| vars.get("rows_per_partition_min"))
-        .or_else(|| vars.get("sort_key_rows_per_partition_min"))
         .and_then(|v| u64::try_from(*v).ok())
         .filter(|v| *v > 0);
 
     let rows_per_partition_max = vars
         .get("sort_key_window_max")
-        .or_else(|| vars.get("rows_per_partition_max"))
-        .or_else(|| vars.get("sort_key_rows_per_partition_max"))
         .and_then(|v| u64::try_from(*v).ok())
         .filter(|v| *v > 0);
 

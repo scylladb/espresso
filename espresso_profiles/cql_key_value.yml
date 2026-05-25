@@ -1,8 +1,8 @@
 version: 1
 
 vars:
-  row_count: 10000000
-  hot_row_count: 0
+  partition_count: 10000000
+  hot_partition_count: 0
   cache_hit_ratio: 80
   offset: 0
   populate_operation_count: 1000000

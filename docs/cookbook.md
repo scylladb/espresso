@@ -423,17 +423,11 @@ phases:
           batch_write_item: 1.0
         operation_templates:
           batch_write_item:
-            request_items_per_call: 100
-            item_template:
-              key:
-                field: key
-                strategy: sequential
-                range: [1, ${vars.row_count}]
-                overflow: cycle
-              value:
-                field: val
-                strategy: fixed
-                fixed_pattern: "seed"
+            item:
+              strategy: sequential
+              key_field: key
+              value_field: val
+              range: [1, ${vars.row_count}]
             retry_unprocessed_items: true
             retry:
               max_attempts: 8
@@ -452,27 +446,20 @@ phases:
           batch_get_item: 0.6
         operation_templates:
           batch_write_item:
-            request_items_per_call: 100
-            item_template:
-              key:
-                field: key
-                strategy: uniform
-                range: [1, ${vars.row_count}]
-              value:
-                field: val
-                strategy: fixed
-                fixed_pattern: "run"
+            item:
+              strategy: uniform
+              key_field: key
+              value_field: val
+              range: [1, ${vars.row_count}]
             retry_unprocessed_items: true
             retry:
               max_attempts: 8
               backoff: exponential_jitter
           batch_get_item:
-            keys_per_call: 100
             key:
-              field: key
               strategy: zipf
               range: [1, ${vars.row_count}]
-              s: 1.1
+              theta: 1.1
             retry_unprocessed_keys: true
             retry:
               max_attempts: 8

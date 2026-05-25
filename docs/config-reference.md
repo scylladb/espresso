@@ -9,7 +9,7 @@ For full copyable examples by use-case, see the [Cookbook](cookbook.md).
 | Property | Value |
 |---|---|
 | Supported formats | YAML, TOML |
-| Recommended extension | .yaml |
+| Recommended extension | .yml |
 | Profiles per file | 1 |
 
 ## Top-Level Keys
@@ -297,10 +297,10 @@ CLI overrides:
 
 ```bash
 # Fixed size per partition
-espresso run --profile <profile.yaml> --var sort_key_window_size=35
+espresso run --profile <profile.yml> --var sort_key_window_size=35
 
 # Bounded variable size per partition
-espresso run --profile <profile.yaml> \
+espresso run --profile <profile.yml> \
   --var sort_key_window_min=1 --var sort_key_window_max=100
 ```
 
@@ -407,10 +407,12 @@ operation_templates:
 ```
 
 Notes:
-- `keys` is optional.
-- Batch size uses `keys` list length when present.
+- `key` defines the generator template for batch key generation.
+- `keys` is optional. When present, batch size uses the `keys` list length.
+- If `key` is omitted, the first entry in `keys` is used as the fallback template.
 - If omitted, batch size defaults to 25.
 - Effective batch size is clamped to `1..100`.
+- `retry:` is the generic retry policy for the request itself and applies to all operation types.
 - `retry_unprocessed_keys: true` treats unprocessed keys as retriable failures.
 - `retry` config (optional) applies Latte-style retries for operation errors:
   - `max_attempts` (default `10`)
@@ -432,10 +434,12 @@ operation_templates:
 ```
 
 Notes:
-- `items` is optional.
-- Batch size uses `items` list length when present.
+- `item` defines the generator template for batch item generation.
+- `items` is optional. When present, batch size uses the `items` list length.
+- If `item` is omitted, the first entry in `items` is used as the fallback template.
 - If omitted, batch size defaults to 25.
 - Effective batch size is clamped to `1..100`.
+- `retry:` is the generic retry policy for the request itself and applies to all operation types.
 - `retry_unprocessed_items: true` treats unprocessed items as retriable failures.
 - `retry` config (optional) uses the same fields as `batch_get_item`.
 

@@ -309,7 +309,7 @@ async fn test_list_tables_empty(cluster: &Cluster) {
 /// `schema::apply` creates the table declared in the test profile.
 async fn test_schema_creates_table(cluster: &Cluster) {
     eprintln!("[test] schema_creates_table");
-    let profile = Profile::load("tests/fixtures/test_profile.yaml").expect("load profile");
+    let profile = Profile::load("tests/fixtures/test_profile.yml").expect("load profile");
     let client = Arc::new(espresso_client(cluster).await);
 
     schema::apply(&client, &profile.tables, &profile.schema)
@@ -364,7 +364,7 @@ async fn test_put_get_roundtrip(cluster: &Cluster) {
 /// Populate phase completes 1 000 put_item ops with no errors.
 async fn test_populate_phase(cluster: &Cluster) {
     eprintln!("[test] populate_phase");
-    let profile = Profile::load("tests/fixtures/test_profile.yaml").expect("load profile");
+    let profile = Profile::load("tests/fixtures/test_profile.yml").expect("load profile");
     let client = Arc::new(espresso_client(cluster).await);
     let runtime_client = Arc::new(EspressoClient::Alternator((*client).clone()));
     let metrics = Metrics::new();
@@ -420,7 +420,7 @@ async fn test_populate_phase(cluster: &Cluster) {
 /// Read-heavy phase runs for 5 s without panicking; ops/s must be > 0.
 async fn test_read_heavy_phase(cluster: &Cluster) {
     eprintln!("[test] read_heavy_phase");
-    let profile = Profile::load("tests/fixtures/test_profile.yaml").expect("load profile");
+    let profile = Profile::load("tests/fixtures/test_profile.yml").expect("load profile");
     let client = Arc::new(espresso_client(cluster).await);
     let runtime_client = Arc::new(EspressoClient::Alternator((*client).clone()));
     let metrics = Metrics::new();
@@ -476,7 +476,7 @@ async fn test_read_heavy_phase(cluster: &Cluster) {
 /// Multi-row partition table (PK+SK) works end-to-end in engine phases.
 async fn test_multi_row_partitions(cluster: &Cluster) {
     eprintln!("[test] multi_row_partitions");
-    let profile = Profile::load("tests/fixtures/multirow_profile.yaml").expect("load profile");
+    let profile = Profile::load("tests/fixtures/multirow_profile.yml").expect("load profile");
     let client = Arc::new(espresso_client(cluster).await);
     let runtime_client = Arc::new(EspressoClient::Alternator((*client).clone()));
 

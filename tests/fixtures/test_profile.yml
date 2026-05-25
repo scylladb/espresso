@@ -1,16 +1,16 @@
 version: 1
 
 # Throttling is controlled via CLI, not in profile YAML:
-#   cargo run -- run --profile tests/fixtures/test_profile.yaml --throttle 2000
-#   cargo run -- run --profile tests/fixtures/test_profile.yaml --throttle 0
+#   cargo run -- run --profile tests/fixtures/test_profile.yml --throttle 2000
+#   cargo run -- run --profile tests/fixtures/test_profile.yml --throttle 0
 # `--throttle 0` means unlimited (run as fast as possible).
 # Phase selection is also controlled via CLI:
-#   cargo run -- run --profile tests/fixtures/test_profile.yaml --phase populate
-#   cargo run -- run --profile tests/fixtures/test_profile.yaml --phase run_read_heavy
+#   cargo run -- run --profile tests/fixtures/test_profile.yml --phase populate
+#   cargo run -- run --profile tests/fixtures/test_profile.yml --phase run_read_heavy
 
 vars:
-  row_count: 100000
-  hot_row_count: 0
+  partition_count: 100000
+  hot_partition_count: 0
   cache_hit_ratio: 80
   offset: 0
   populate_operation_count: 100000

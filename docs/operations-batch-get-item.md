@@ -4,9 +4,10 @@ Use BatchGetItem to model batched point-read traffic and unprocessed key retries
 
 ## How to use
 
-- Set `keys_per_call` based on endpoint limits.
+- Use `key` for the generator template and `keys` when you want to control batch size by list length.
 - For Alternator, up to 100 keys per request is supported.
 - Enable retry for unprocessed keys to simulate production client behavior.
+- Use `retry:` for generic request retries. `retry_unprocessed_keys` only applies to `batch_get_item`.
 
 ## Full configuration example
 
@@ -60,12 +61,19 @@ phases:
           batch_get_item: 1.0
         operation_templates:
           batch_get_item:
-            keys_per_call: 100
             key:
-              field: key
               strategy: zipf
               range: [1, ${vars.row_count}]
-              s: 1.1
+              theta: 1.1
+            keys:
+              - strategy: zipf
+                key_field: key
+                range: [1, ${vars.row_count}]
+                theta: 1.1
+              - strategy: zipf
+                key_field: key
+                range: [1, ${vars.row_count}]
+                theta: 1.1
             retry_unprocessed_keys: true
             retry:
               max_attempts: 8

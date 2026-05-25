@@ -69,7 +69,7 @@ phases:
 ```
 
 Reference sample profile:
-- [espresso_profiles/cql_key_value.yaml](../espresso_profiles/cql_key_value.yaml)
+- [espresso_profiles/cql_key_value.yml](../espresso_profiles/cql_key_value.yml)
 
 Type notes:
 - For CQL profiles, prefer native Scylla/CQL types in schema definitions (`bigint`, `text`, `blob`, `int`, `smallint`, `tinyint`, `float`, `double`, `boolean`).
@@ -79,17 +79,17 @@ Type notes:
 
 ```bash
 # Run all phases
-cargo run --release -- run --profile espresso_profiles/cql_key_value.yaml
+cargo run --release -- run --profile espresso_profiles/cql_key_value.yml
 
 # Override nodes
-cargo run --release -- run --profile espresso_profiles/cql_key_value.yaml \
+cargo run --release -- run --profile espresso_profiles/cql_key_value.yml \
   --nodes 10.0.0.11:9042,10.0.0.12:9042,10.0.0.13:9042
 
 # Run one phase only
-cargo run --release -- run --profile espresso_profiles/cql_key_value.yaml --phase run_read_heavy
+cargo run --release -- run --profile espresso_profiles/cql_key_value.yml --phase run_read_heavy
 
 # Apply schema only
-cargo run --release -- schema --profile espresso_profiles/cql_key_value.yaml
+cargo run --release -- schema --profile espresso_profiles/cql_key_value.yml
 ```
 
 ## Throughput and Latency Controls
@@ -109,13 +109,17 @@ For CQL specifically:
 Example:
 
 ```bash
-cargo run --release -- run --profile espresso_profiles/cql_key_value.yaml \
+cargo run --release -- run --profile espresso_profiles/cql_key_value.yml \
   --throttle 15000 --throttle-sine-amplitude 0.25 --throttle-sine-period 60s
 ```
 
 ## Retry Configuration (Latte-Style)
 
 Retry is configured per operation template.
+
+Two retry paths exist:
+- `retry:` is the generic request retry policy and applies to all operations, including simple `get_item` / `put_item` / CQL equivalents.
+- `retry_unprocessed_keys` for `batch_get_item` and `retry_unprocessed_items` for `batch_write_item` handle batch-specific partial response retries.
 
 Supported fields:
 - `retry.max_attempts` (default `10`)

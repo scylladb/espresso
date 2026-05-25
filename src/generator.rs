@@ -271,7 +271,7 @@ pub type ResolvedVars = HashMap<String, i64>;
 
 /// Build a [`KeyGen`] from a generator config entry and resolved vars.
 pub fn build_key_gen(cfg: &GenConfig, vars: &ResolvedVars) -> KeyGen {
-    let row_count = vars.get("row_count").copied().unwrap_or(1_000_000);
+    let partition_count = vars.get("partition_count").copied().unwrap_or(1_000_000);
     let offset = vars.get("offset").copied().unwrap_or(0);
 
     let range_bounds = cfg.range.map(|(a, b)| if a <= b { (a, b) } else { (b, a) });
@@ -290,7 +290,7 @@ pub fn build_key_gen(cfg: &GenConfig, vars: &ResolvedVars) -> KeyGen {
             if let Some((min, max)) = range_bounds {
                 KeyGen::uniform(min, max + 1)
             } else {
-                KeyGen::uniform(offset, offset + row_count)
+                KeyGen::uniform(offset, offset + partition_count)
             }
         }
         GeneratorStrategy::Zipf => {
@@ -299,7 +299,7 @@ pub fn build_key_gen(cfg: &GenConfig, vars: &ResolvedVars) -> KeyGen {
                 let n = (max - min + 1).max(1);
                 KeyGen::zipf(n, theta, min)
             } else {
-                KeyGen::zipf(row_count, theta, offset)
+                KeyGen::zipf(partition_count, theta, offset)
             }
         }
         GeneratorStrategy::Fixed => {
@@ -310,7 +310,7 @@ pub fn build_key_gen(cfg: &GenConfig, vars: &ResolvedVars) -> KeyGen {
             // Callers that need exact hit-ratio semantics should use
             // `CachedWorkingSet::new` directly. Here we return a uniform
             // fallback so the factory always yields a `KeyGen`.
-            KeyGen::uniform(offset, offset + row_count)
+            KeyGen::uniform(offset, offset + partition_count)
         }
     }
 }

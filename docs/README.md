@@ -22,6 +22,6 @@ This directory contains detailed configuration guides for espresso workloads acr
 
 ## Notes
 
-- Examples use the same profile structure used in `espresso_profiles/key_value.yaml`.
+- Examples use the same profile structure used in `espresso_profiles/key_value.yml`.
 - Operation templates are declarative; espresso generates internal expressions as needed.
 - All examples are intended as full, copyable profiles that can be adapted per environment.

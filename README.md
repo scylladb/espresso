@@ -120,17 +120,17 @@ Configuration goals:
 
 ```bash
 # Run CQL profile against local Scylla
-cargo run --release -- run --profile espresso_profiles/cql_key_value.yaml
+cargo run --release -- run --profile espresso_profiles/cql_key_value.yml
 
 # Override nodes for a cluster
-cargo run --release -- run --profile espresso_profiles/cql_key_value.yaml \
+cargo run --release -- run --profile espresso_profiles/cql_key_value.yml \
   --nodes node1:9042,node2:9042,node3:9042
 
 # Use schema command only (creates keyspace/tables if configured)
-cargo run --release -- schema --profile espresso_profiles/cql_key_value.yaml
+cargo run --release -- schema --profile espresso_profiles/cql_key_value.yml
 
 # Run with throttle and sinusoidal variation
-cargo run --release -- run --profile espresso_profiles/cql_key_value.yaml \
+cargo run --release -- run --profile espresso_profiles/cql_key_value.yml \
   --throttle 10000 --throttle-sine-amplitude 0.2 --throttle-sine-period 60s
 ```
 
@@ -206,42 +206,42 @@ espresso run --nodes http://node1:8000 --phase read_only \
 # ── Custom profile ──────────────────────────────────────────────────────────
 
 # Run all phases from an Alternator profile
-espresso run --profile espresso_profiles/key_value.yaml
+espresso run --profile espresso_profiles/key_value.yml
 
 # Run all phases from a CQL profile
-espresso run --profile espresso_profiles/cql_key_value.yaml
+espresso run --profile espresso_profiles/cql_key_value.yml
 
 # Override variables at runtime
-espresso run --profile espresso_profiles/key_value.yaml \
+espresso run --profile espresso_profiles/key_value.yml \
   --var cache_hit_ratio=95 --var row_count=5000000
 
 # Override target nodes from CLI even with a custom profile
-espresso run --profile espresso_profiles/key_value.yaml \
+espresso run --profile espresso_profiles/key_value.yml \
   --nodes http://node1:8000,http://node2:8000
 
 # Limit total phase throughput (shared across all workers)
-espresso run --profile espresso_profiles/key_value.yaml --throttle 2000
+espresso run --profile espresso_profiles/key_value.yml --throttle 2000
 
 # Disable throttling explicitly (run as fast as possible)
-espresso run --profile espresso_profiles/key_value.yaml --throttle 0
+espresso run --profile espresso_profiles/key_value.yml --throttle 0
 
 # Run only one phase by name
-espresso run --profile espresso_profiles/key_value.yaml --phase populate
+espresso run --profile espresso_profiles/key_value.yml --phase populate
 
 # Run one phase with throttle
-espresso run --profile espresso_profiles/key_value.yaml \
+espresso run --profile espresso_profiles/key_value.yml \
   --phase run_read_heavy --throttle 2000
 
 # Adaptive throttle to target p99 latency (milliseconds)
-espresso run --profile espresso_profiles/key_value.yaml \
+espresso run --profile espresso_profiles/key_value.yml \
   --phase run_read_heavy --target-p99-ms 25
 
 # Adaptive mode with an explicit starting throttle
-espresso run --profile espresso_profiles/key_value.yaml \
+espresso run --profile espresso_profiles/key_value.yml \
   --phase run_read_heavy --throttle 1000 --target-p99-ms 25
 
 # Apply schema only
-espresso schema --profile espresso_profiles/key_value.yaml
+espresso schema --profile espresso_profiles/key_value.yml
 ```
 
 Rows and duration notes:
@@ -358,22 +358,22 @@ Batch sizing:
 - Batch size is clamped to `1..100`.
 
 Scenario-ready sample profiles:
-- Fixed rows-per-partition window: `espresso_profiles/composite_fixed_rows.yaml`
-- Variable rows-per-partition window: `espresso_profiles/composite_variable_rows.yaml`
+- Fixed rows-per-partition window: `espresso_profiles/composite_fixed_rows.yml`
+- Variable rows-per-partition window: `espresso_profiles/composite_variable_rows.yml`
 
 Run examples:
 
 ```bash
 # Fixed logical 35-row window per partition
-espresso run --profile espresso_profiles/composite_fixed_rows.yaml --phase populate
-espresso run --profile espresso_profiles/composite_fixed_rows.yaml --phase read_write
+espresso run --profile espresso_profiles/composite_fixed_rows.yml --phase populate
+espresso run --profile espresso_profiles/composite_fixed_rows.yml --phase read_write
 
 # Variable logical window per partition in [1, 100]
-espresso run --profile espresso_profiles/composite_variable_rows.yaml --phase populate
-espresso run --profile espresso_profiles/composite_variable_rows.yaml --phase read_write
+espresso run --profile espresso_profiles/composite_variable_rows.yml --phase populate
+espresso run --profile espresso_profiles/composite_variable_rows.yml --phase read_write
 
 # Override keyspace and distribution from CLI
-espresso run --profile espresso_profiles/composite_variable_rows.yaml \
+espresso run --profile espresso_profiles/composite_variable_rows.yml \
   --phase read_write --var row_count=50000 \
   --var rows_per_partition_min=5 --var rows_per_partition_max=90
 ```
