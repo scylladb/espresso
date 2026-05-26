@@ -25,13 +25,14 @@ use scylla::client::session_builder::SessionBuilder;
 use scylla::policies::load_balancing::DefaultPolicy;
 use tracing::info;
 
-use config::{AuthConfig, Profile, TargetKind};
+use config::{AuthConfig, NodeExecutionMode, Profile, TargetKind};
 use node_router::NodeRouter;
 use resolver::RoundRobinResolver;
 
 #[derive(Clone)]
 pub enum EspressoClient {
     Alternator(Client),
+    AlternatorNodeAffinity(Arc<Vec<Client>>),
     Cql(Arc<Session>),
 }
 
@@ -101,14 +102,14 @@ pub async fn build_client(profile: &Profile) -> Result<EspressoClient> {
             } else {
                 t.auth.secret_key.clone()
             };
-            let c = build_alternator_client_from_nodes(
+            build_alternator_runtime_client(
                 &t.nodes,
                 &t.region,
                 &t.auth.access_key,
                 &secret_key,
+                &t.node_execution_mode,
             )
-            .await?;
-            Ok(EspressoClient::Alternator(c))
+            .await
         }
         TargetKind::Cql => {
             let s = build_cql_session_from_nodes(
@@ -125,6 +126,113 @@ pub async fn build_client(profile: &Profile) -> Result<EspressoClient> {
             Ok(EspressoClient::Cql(Arc::new(s)))
         }
     }
+}
+
+async fn build_alternator_runtime_client(
+    nodes: &[String],
+    region: &str,
+    access_key: &str,
+    secret_key: &str,
+    mode: &NodeExecutionMode,
+) -> Result<EspressoClient> {
+    let creds = Credentials::new(access_key, secret_key, None, None, "espresso");
+    let resolved_nodes = resolve_alternator_nodes(nodes, region, &creds).await?;
+
+    let mode_name = match mode {
+        NodeExecutionMode::RoundRobin => "round_robin",
+        NodeExecutionMode::NodeAffinity => "node_affinity",
+    };
+    info!(
+        "Alternator runtime configured: mode={}, resolved_endpoints={}",
+        mode_name,
+        resolved_nodes.len()
+    );
+
+    match mode {
+        NodeExecutionMode::RoundRobin => {
+            let router = NodeRouter::from_seeds(resolved_nodes.clone());
+            let config = aws_sdk_dynamodb::Config::builder()
+                .behavior_version(BehaviorVersion::latest())
+                .region(Region::new(region.to_string()))
+                .credentials_provider(creds)
+                .endpoint_resolver(RoundRobinResolver::new(router))
+                .build();
+            Ok(EspressoClient::Alternator(Client::from_conf(config)))
+        }
+        NodeExecutionMode::NodeAffinity => {
+            let clients: Vec<Client> = resolved_nodes
+                .iter()
+                .map(|endpoint| {
+                    let cfg = aws_sdk_dynamodb::Config::builder()
+                        .behavior_version(BehaviorVersion::latest())
+                        .region(Region::new(region.to_string()))
+                        .credentials_provider(creds.clone())
+                        .endpoint_url(endpoint)
+                        .build();
+                    Client::from_conf(cfg)
+                })
+                .collect();
+                    info!(
+                        "node_affinity mapping ready: worker_index % {} endpoint client(s)",
+                        clients.len()
+                    );
+            Ok(EspressoClient::AlternatorNodeAffinity(Arc::new(clients)))
+        }
+    }
+}
+
+async fn resolve_alternator_nodes(
+    nodes: &[String],
+    region: &str,
+    creds: &Credentials,
+) -> Result<Vec<String>> {
+    if nodes.is_empty() {
+        anyhow::bail!("node list must not be empty");
+    }
+
+    let seed = &nodes[0];
+    let seed_config = aws_sdk_dynamodb::Config::builder()
+        .behavior_version(BehaviorVersion::latest())
+        .region(Region::new(region.to_string()))
+        .credentials_provider(creds.clone())
+        .endpoint_url(seed)
+        .build();
+    let seed_client = Client::from_conf(seed_config);
+
+    let resolved_nodes = match NodeRouter::discover(&seed_client, seed).await {
+        Ok(r) => {
+            let discovered = r.nodes().to_vec();
+            let configured = nodes.to_vec();
+
+            if discovered.len() < configured.len() {
+                tracing::warn!(
+                    "Discovery returned {} node(s), but {} node(s) were configured; using configured nodes to ensure full coverage",
+                    discovered.len(),
+                    configured.len()
+                );
+                dedupe_nodes(configured)
+            } else {
+                let merged = dedupe_nodes(
+                    configured
+                        .into_iter()
+                        .chain(discovered.into_iter())
+                        .collect(),
+                );
+                info!(
+                    "Discovered {} Alternator node(s); using {} node(s)",
+                    r.node_count(),
+                    merged.len()
+                );
+                merged
+            }
+        }
+        Err(e) => {
+            tracing::warn!("Node discovery failed ({e}), using seed list");
+            dedupe_nodes(nodes.to_vec())
+        }
+    };
+
+    Ok(resolved_nodes)
 }
 
 /// Backward-compatible helper for existing tests/callers.
@@ -144,55 +252,9 @@ pub async fn build_alternator_client_from_nodes(
     access_key: &str,
     secret_key: &str,
 ) -> Result<Client> {
-    if nodes.is_empty() {
-        anyhow::bail!("node list must not be empty");
-    }
-
     let creds = Credentials::new(access_key, secret_key, None, None, "espresso");
-
-    // Phase 1: seed client for DescribeEndpoints discovery.
-    let seed = &nodes[0];
-    let seed_config = aws_sdk_dynamodb::Config::builder()
-        .behavior_version(BehaviorVersion::latest())
-        .region(Region::new(region.to_string()))
-        .credentials_provider(creds.clone())
-        .endpoint_url(seed)
-        .build();
-    let seed_client = Client::from_conf(seed_config);
-
-    // Phase 2: discover full node list.
-    let router = match NodeRouter::discover(&seed_client, seed).await {
-        Ok(r) => {
-            let discovered = r.nodes().to_vec();
-            let configured = nodes.to_vec();
-
-            if discovered.len() < configured.len() {
-                tracing::warn!(
-                    "Discovery returned {} node(s), but {} node(s) were configured; using configured nodes to ensure full coverage",
-                    discovered.len(),
-                    configured.len()
-                );
-                NodeRouter::from_seeds(dedupe_nodes(configured))
-            } else {
-                let merged = dedupe_nodes(
-                    configured
-                        .into_iter()
-                        .chain(discovered.into_iter())
-                        .collect(),
-                );
-                info!(
-                    "Discovered {} Alternator node(s); using {} node(s)",
-                    r.node_count(),
-                    merged.len()
-                );
-                NodeRouter::from_seeds(merged)
-            }
-        }
-        Err(e) => {
-            tracing::warn!("Node discovery failed ({e}), using seed list");
-            NodeRouter::from_seeds(nodes.to_vec())
-        }
-    };
+    let resolved_nodes = resolve_alternator_nodes(nodes, region, &creds).await?;
+    let router = NodeRouter::from_seeds(resolved_nodes);
 
     // Phase 3: production client with round-robin routing.
     let config = aws_sdk_dynamodb::Config::builder()

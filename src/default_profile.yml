@@ -1,21 +1,22 @@
+# Espresso default key/value profile.
+# Used automatically when no --profile is supplied.
+# Override the target cluster with --nodes http://host:8000
+#
+# Variables can still be overridden from the CLI:
+#   espresso run --nodes http://node1:8000 --var partition_count=5000000
 version: 1
 
-# Variables can be overridden via CLI, for example:
-# espresso run --profile espresso_profiles/key_value.yaml --var cache_hit_ratio=95
 vars:
-  row_count: 1000000000
-  hot_row_count: 0
-  cache_hit_ratio: 80
+  partition_count: 1000000
   offset: 0
   populate_operation_count: 1000000
 
 target:
   kind: alternator
   nodes:
-    - http://node1:8000
-    - http://node2:8000
-    - http://node3:8000
+    - http://localhost:8000
   region: us-east-1
+  node_execution_mode: round_robin
   auth:
     access_key: test
     secret_key: test
@@ -23,7 +24,7 @@ target:
     enabled: false
 
 tables:
-  - name: key_value_a
+  - name: espresso_kv
     billing_mode: pay_per_request
     key_schema:
       partition_key:
@@ -36,19 +37,6 @@ tables:
         type: B
         size_bytes: 1024
 
-  - name: key_value_b
-    billing_mode: pay_per_request
-    key_schema:
-      partition_key:
-        name: key
-        type: N
-    attributes:
-      - name: key
-        type: N
-      - name: val
-        type: B
-        size_bytes: 2048
-
 schema:
   create_if_missing: true
   delete_if_exists: false
@@ -58,11 +46,12 @@ phases:
   - name: populate
     mode: operation_count
     operations: ${vars.populate_operation_count}
-    concurrency: 256
+    threads: 1
+    concurrency: 128
     warmup: 0s
     include_in_metrics: false
     table_operations:
-      - table: key_value_a
+      - table: espresso_kv
         mix:
           put_item: 1.0
         operation_templates:
@@ -72,48 +61,63 @@ phases:
               key_field: key
               value_field: val
 
-      - table: key_value_b
-        mix:
-          put_item: 1.0
-        operation_templates:
-          put_item:
-            item:
-              strategy: generated_from_vars
-              key_field: key
-              value_field: val
-
-  - name: run_read_heavy
+  # 100% sequential writes — measures peak write throughput.
+  # espresso run --nodes http://... --phase write_only
+  - name: write_only
     mode: duration
     duration: 60s
-    concurrency: 256
+    threads: 1
+    concurrency: 128
     warmup: 10s
     include_in_metrics: true
     table_operations:
-      - table: key_value_a
+      - table: espresso_kv
         mix:
-          get_item: 0.9
-          put_item: 0.1
+          put_item: 1.0
+        operation_templates:
+          put_item:
+            item:
+              strategy: generated_from_vars
+              key_field: key
+              value_field: val
+
+  # 100% point reads — measures peak read throughput.
+  # espresso run --nodes http://... --phase read_only
+  - name: read_only
+    mode: duration
+    duration: 60s
+    threads: 1
+    concurrency: 128
+    warmup: 10s
+    include_in_metrics: true
+    table_operations:
+      - table: espresso_kv
+        mix:
+          get_item: 1.0
         operation_templates:
           get_item:
             key:
               strategy: cached_working_set
               key_field: key
-          put_item:
-            item:
-              strategy: generated_from_vars
-              key_field: key
-              value_field: val
 
-      - table: key_value_b
-        vars_overrides:
-          row_count: 500000000
+  # 80% reads / 20% writes — balanced mixed workload (default benchmark).
+  # espresso run --nodes http://... --phase benchmark
+  - name: benchmark
+    mode: duration
+    duration: 60s
+    threads: 1
+    concurrency: 128
+    warmup: 10s
+    include_in_metrics: true
+    table_operations:
+      - table: espresso_kv
         mix:
-          get_item: 0.7
-          put_item: 0.3
+          get_item: 0.8
+          put_item: 0.2
         operation_templates:
           get_item:
             key:
-              strategy: uniform
+              strategy: cached_working_set
               key_field: key
           put_item:
             item:
@@ -127,10 +131,3 @@ report:
     interval: 1s
   outputs:
     text_summary: true
-    json_file: ./results/key_value.json
-    hdr_histogram_file: ./results/key_value.hdr
-
-compatibility:
-  endpoint_type: alternator
-  enforce_supported_operations: true
-  write_isolation_mode: unknown

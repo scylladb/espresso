@@ -9,7 +9,7 @@ For full copyable examples by use-case, see the [Cookbook](cookbook.md).
 | Property | Value |
 |---|---|
 | Supported formats | YAML, TOML |
-| Recommended extension | .yaml |
+| Recommended extension | .yml |
 | Profiles per file | 1 |
 
 ## Top-Level Keys
@@ -53,6 +53,7 @@ Conventionally used vars in examples:
 | kind | string | yes | `alternator` or `cql` |
 | nodes | list of strings | yes | Alternator: URL list (for example `http://node1:8000`). CQL: host:port list (for example `node1:9042`). |
 | region | string | no | Alternator region string. Default: `us-east-1`. |
+| node_execution_mode | string | no | Alternator only. `round_robin` (default) or `node_affinity`. `node_affinity` pins workers to endpoint clients for stronger per-node fanout. |
 | auth.access_key | string | no | Optional for both backends. For CQL, used as username when non-empty. |
 | auth.secret_key | string | no | Optional for both backends. For CQL, used as password when access_key is non-empty. |
 | auth.fetch_salted_hash | boolean | no | Alternator only. When `true`, espresso opens a CQL connection, reads the `salted_hash` for the role named by `access_key` from `system.roles`, and uses that hash as the Alternator secret key. Required for ScyllaDB Cloud clusters where the Alternator secret key is the internal role password hash, not the plaintext CQL password. Default: `false`. |
@@ -116,10 +117,14 @@ List of phase objects, executed in order. Each phase:
 | mode | string | yes | `duration` or `operation_count` |
 | duration | string | if mode=duration | Duration string, e.g. `60s`, `5m` |
 | operations | integer | if mode=operation_count | Total operation count. Accepts `${vars.*}`. |
-| concurrency | integer | yes | Number of concurrent workers |
+| threads | integer | yes | Worker task count |
+| concurrency | integer | yes | Per-worker in-flight requests |
 | warmup | string | no | Duration excluded from metrics. e.g. `10s` |
 | include_in_metrics | boolean | yes | Set `false` for populate phases |
 | table_operations | list | yes | Per-table operation configuration |
+
+Concurrency model:
+- Effective parallelism is approximately `threads * concurrency`.
 
 ---
 
@@ -143,6 +148,7 @@ Some execution controls are CLI-only and are not stored in the profile.
 
 | CLI option | Type | Description |
 |---|---|---|
+| `--threads` | integer | Overrides `phase.threads` for all selected phases |
 | `--concurrency` | integer | Overrides `phase.concurrency` for all selected phases |
 | `--phase` | string | Runs only the named phase |
 | `--var KEY=VALUE` | repeatable | Overrides values in top-level `vars` |
@@ -227,16 +233,76 @@ Sort key generation:
 
 Rows-per-partition controls (PK+SK tables):
 
-| Var | Type | Behavior |
+| Option | Type | Behavior |
 |---|---|---|
-| `rows_per_partition` | integer > 0 | Fixed sort-key rows per partition |
-| `rows_per_partition_min` + `rows_per_partition_max` | integers > 0 | Randomized rows per partition within inclusive range |
+| `sort_key_window_size` | integer > 0 | Fixed sort-key window size per partition (preferred) |
+| `sort_key_window_min` + `sort_key_window_max` | integers > 0 | Variable sort-key window size per partition (preferred) |
+| `rows_per_partition` | integer > 0 | Legacy alias of `sort_key_window_size` |
+| `rows_per_partition_min` + `rows_per_partition_max` | integers > 0 | Legacy aliases of `sort_key_window_min/max` |
+| `sort_key_rows_per_partition` | integer > 0 | Legacy alias of `sort_key_window_size` |
+| `sort_key_rows_per_partition_min` + `sort_key_rows_per_partition_max` | integers > 0 | Legacy aliases of `sort_key_window_min/max` |
 
 Notes:
-- If `rows_per_partition` is set, it takes precedence.
+- Fixed-size settings take precedence over range settings.
+- Precedence for fixed size: `sort_key_window_size` -> `rows_per_partition` -> `sort_key_rows_per_partition`.
+- Precedence for range: `sort_key_window_min/max` -> `rows_per_partition_min/max` -> `sort_key_rows_per_partition_min/max`.
 - If min/max are set, Espresso computes a stable per-partition value in `[min, max]`.
 - This allows uneven partition sizes (for example some partitions with 5 rows, others with 90).
 - These values define the active logical sort-key window per partition; exact on-disk uniqueness depends on generator strategy and write mix.
+
+Important clarification:
+- `sort_key_window_min/max` defines logical window capacity (possible sort-key slots), not guaranteed persisted row count.
+- Example: with `sort_key_window_min: 500` and `sort_key_window_max: 1000`, a partition gets between 500 and 1000 possible sort-key slots.
+- You only get 500+ stored rows in that partition if populate writes enough unique `PK + SK` pairs into those slots.
+- Repeated writes to the same `PK + SK` overwrite existing items and do not increase row count.
+
+Available definitions:
+
+Fixed window (all partitions same size):
+
+```yaml
+vars:
+  sort_key_window_size: 35
+```
+
+Equivalent legacy alias forms:
+
+```yaml
+vars:
+  rows_per_partition: 35
+  # or
+  sort_key_rows_per_partition: 35
+```
+
+Variable window (stable per partition, bounded range):
+
+```yaml
+vars:
+  sort_key_window_min: 1
+  sort_key_window_max: 100
+```
+
+Equivalent legacy alias forms:
+
+```yaml
+vars:
+  rows_per_partition_min: 1
+  rows_per_partition_max: 100
+  # or
+  sort_key_rows_per_partition_min: 1
+  sort_key_rows_per_partition_max: 100
+```
+
+CLI overrides:
+
+```bash
+# Fixed size per partition
+espresso run --profile <profile.yml> --var sort_key_window_size=35
+
+# Bounded variable size per partition
+espresso run --profile <profile.yml> \
+  --var sort_key_window_min=1 --var sort_key_window_max=100
+```
 
 Simple bounded key syntax:
 - Generators support `range: [min, max]` (inclusive).
@@ -311,8 +377,8 @@ Example:
 
 ```yaml
 vars:
-  rows_per_partition_min: 1
-  rows_per_partition_max: 100
+  sort_key_window_min: 1
+  sort_key_window_max: 100
 
 operation_templates:
   get_item:
@@ -341,10 +407,12 @@ operation_templates:
 ```
 
 Notes:
-- `keys` is optional.
-- Batch size uses `keys` list length when present.
+- `key` defines the generator template for batch key generation.
+- `keys` is optional. When present, batch size uses the `keys` list length.
+- If `key` is omitted, the first entry in `keys` is used as the fallback template.
 - If omitted, batch size defaults to 25.
 - Effective batch size is clamped to `1..100`.
+- `retry:` is the generic retry policy for the request itself and applies to all operation types.
 - `retry_unprocessed_keys: true` treats unprocessed keys as retriable failures.
 - `retry` config (optional) applies Latte-style retries for operation errors:
   - `max_attempts` (default `10`)
@@ -366,10 +434,12 @@ operation_templates:
 ```
 
 Notes:
-- `items` is optional.
-- Batch size uses `items` list length when present.
+- `item` defines the generator template for batch item generation.
+- `items` is optional. When present, batch size uses the `items` list length.
+- If `item` is omitted, the first entry in `items` is used as the fallback template.
 - If omitted, batch size defaults to 25.
 - Effective batch size is clamped to `1..100`.
+- `retry:` is the generic retry policy for the request itself and applies to all operation types.
 - `retry_unprocessed_items: true` treats unprocessed items as retriable failures.
 - `retry` config (optional) uses the same fields as `batch_get_item`.
 

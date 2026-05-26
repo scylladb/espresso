@@ -4,10 +4,11 @@ Use BatchWriteItem to stress high-ingest paths and unprocessed-item retry behavi
 
 ## How to use
 
-- Set `request_items_per_call` based on endpoint limits.
+- Use `item` for the generator template and `items` when you want to control batch size by list length.
 - For Alternator, use up to 100 items per request.
 - Enable retries for unprocessed items.
 - This example uses `sequential` keys and `fixed` value content in each batch item.
+- Use `retry:` for generic request retries. `retry_unprocessed_items` only applies to `batch_write_item`.
 
 ## Full configuration example
 
@@ -61,17 +62,20 @@ phases:
           batch_write_item: 1.0
         operation_templates:
           batch_write_item:
-            request_items_per_call: 100
-            item_template:
-              key:
-                field: key
-                strategy: sequential
+            item:
+              strategy: sequential
+              key_field: key
+              value_field: val
+              range: [1, ${vars.row_count}]
+            items:
+              - strategy: sequential
+                key_field: key
+                value_field: val
                 range: [1, ${vars.row_count}]
-                overflow: cycle
-              value:
-                field: val
-                strategy: fixed
-                fixed_pattern: "batch-write"
+              - strategy: sequential
+                key_field: key
+                value_field: val
+                range: [1, ${vars.row_count}]
             retry_unprocessed_items: true
             retry:
               max_attempts: 8

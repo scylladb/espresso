@@ -1,10 +1,10 @@
 version: 1
 
 vars:
-  row_count: 50000
+  partition_count: 50000
   offset: 1
-  rows_per_partition_min: 1
-  rows_per_partition_max: 100
+  sort_key_window_min: 1
+  sort_key_window_max: 100
   sort_key_offset: 1
   populate_operation_count: 50000
 

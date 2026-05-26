@@ -1,22 +1,21 @@
 version: 1
 
-# Composite-key profile with variable logical row windows per partition.
+# Composite-key profile with a fixed logical row window per partition.
 #
-# Use when you want uneven partition sizes (for example some partitions with
-# fewer than 10 rows and others close to 90).
+# Use when you want every partition to have the same active sort-key span.
+# Example: exactly 35 logical sort-key slots per partition within [1, 100].
 #
 # Run:
-#   espresso run --profile espresso_profiles/composite_variable_rows.yaml --phase populate
-#   espresso run --profile espresso_profiles/composite_variable_rows.yaml --phase read_write
+#   espresso run --profile espresso_profiles/composite_fixed_rows.yml --phase populate
+#   espresso run --profile espresso_profiles/composite_fixed_rows.yml --phase read_write
 #
 # Optional overrides:
-#   --var row_count=50000
-#   --var rows_per_partition_min=1 --var rows_per_partition_max=100
+#   --var partition_count=50000
+#   --var sort_key_window_size=35
 
 vars:
-  row_count: 10000
-  rows_per_partition_min: 1
-  rows_per_partition_max: 100
+  partition_count: 10000
+  sort_key_window_size: 35
   sort_key_offset: 1
   populate_operation_count: 2000000
 
@@ -32,7 +31,7 @@ target:
     enabled: false
 
 tables:
-  - name: orders_variable
+  - name: orders_fixed
     billing_mode: pay_per_request
     key_schema:
       partition_key:
@@ -63,7 +62,7 @@ phases:
     warmup: 0s
     include_in_metrics: false
     table_operations:
-      - table: orders_variable
+      - table: orders_fixed
         mix:
           put_item: 1.0
         operation_templates:
@@ -84,7 +83,7 @@ phases:
     warmup: 10s
     include_in_metrics: true
     table_operations:
-      - table: orders_variable
+      - table: orders_fixed
         mix:
           get_item: 0.8
           put_item: 0.2

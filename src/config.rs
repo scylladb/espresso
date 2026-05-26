@@ -7,6 +7,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use serde::Deserialize;
+use serde::de::{Deserializer, Error as DeError};
 use serde_yaml::Value as YamlValue;
 
 // ── Top-level ─────────────────────────────────────────────────────────────────
@@ -21,6 +22,7 @@ pub struct Profile {
     pub vars: HashMap<String, YamlValue>,
 
     pub target: Target,
+    #[serde(alias = "table", deserialize_with = "deserialize_tables_section")]
     pub tables: Vec<TableDef>,
     pub schema: SchemaConfig,
     pub phases: Vec<Phase>,
@@ -30,7 +32,7 @@ pub struct Profile {
 }
 
 /// The built-in default key/value profile embedded at compile time.
-pub const DEFAULT_PROFILE_YAML: &str = include_str!("default_profile.yaml");
+pub const DEFAULT_PROFILE_YAML: &str = include_str!("default_profile.yml");
 
 impl Profile {
     /// Load and parse a profile from a YAML file.
@@ -66,6 +68,8 @@ pub struct Target {
     pub nodes: Vec<String>,
     #[serde(default = "default_region")]
     pub region: String,
+    #[serde(default = "default_node_execution_mode")]
+    pub node_execution_mode: NodeExecutionMode,
     #[serde(default)]
     pub auth: AuthConfig,
     #[serde(default)]
@@ -79,6 +83,13 @@ pub struct Target {
 pub enum TargetKind {
     Alternator,
     Cql,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum NodeExecutionMode {
+    RoundRobin,
+    NodeAffinity,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -273,6 +284,12 @@ pub struct Phase {
     /// May be a var reference such as `${vars.populate_operation_count}`.
     pub operations: Option<NumOrVarRef>,
 
+    /// Number of worker tasks.
+    #[serde(default = "default_one_u32")]
+    pub threads: u32,
+
+    /// Per-thread in-flight request concurrency.
+    #[serde(default = "default_one_u32")]
     pub concurrency: u32,
 
     /// Warm-up period before metrics are collected (e.g. `"10s"`, `"0s"`).
@@ -479,8 +496,16 @@ fn default_true() -> bool {
     true
 }
 
+fn default_one_u32() -> u32 {
+    1
+}
+
 fn default_region() -> String {
     "us-east-1".to_string()
+}
+
+fn default_node_execution_mode() -> NodeExecutionMode {
+    NodeExecutionMode::RoundRobin
 }
 
 fn default_keyspace() -> String {
@@ -503,6 +528,29 @@ fn default_retry_max_delay_ms() -> u64 {
     5000
 }
 
+fn deserialize_tables_section<'de, D>(deserializer: D) -> std::result::Result<Vec<TableDef>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum OneOrManyTables {
+        One(TableDef),
+        Many(Vec<TableDef>),
+    }
+
+    match OneOrManyTables::deserialize(deserializer)? {
+        OneOrManyTables::One(t) => Ok(vec![t]),
+        OneOrManyTables::Many(ts) => {
+            if ts.is_empty() {
+                Err(D::Error::custom("profile must define at least one table"))
+            } else {
+                Ok(ts)
+            }
+        }
+    }
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -511,15 +559,15 @@ mod tests {
 
     #[test]
     fn load_key_value_profile() {
-        let p = Profile::load("espresso_profiles/key_value.yaml")
-            .expect("key_value.yaml should parse without errors");
+        let p = Profile::load("espresso_profiles/key_value.yml")
+            .expect("key_value.yml should parse without errors");
 
         assert_eq!(p.version, 1);
         assert_eq!(p.tables.len(), 2);
         assert_eq!(p.phases.len(), 2);
 
         // vars
-        assert!(p.vars.contains_key("row_count"));
+        assert!(p.vars.contains_key("partition_count"));
 
         // target
         assert_eq!(p.target.nodes.len(), 3);
@@ -626,4 +674,5 @@ mod tests {
         assert_eq!(retry.base_delay_ms, 50);
         assert_eq!(retry.max_delay_ms, 1500);
     }
+
 }

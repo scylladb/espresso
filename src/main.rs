@@ -45,8 +45,8 @@ enum Commands {
         #[arg(long, value_delimiter = ',')]
         nodes: Vec<String>,
 
-        /// Number of rows to write during populate/write phases.
-        /// Sets both `row_count` and `populate_operation_count` in vars.
+        /// Number of partitions to target during populate/write phases.
+        /// Sets both `partition_count` and `populate_operation_count` in vars.
         #[arg(long)]
         rows: Option<u64>,
 
@@ -54,11 +54,15 @@ enum Commands {
         #[arg(long, value_name = "DURATION")]
         duration: Option<String>,
 
-        /// Override a profile variable: --var row_count=500000
+        /// Override a profile variable: --var partition_count=500000
         #[arg(long, value_name = "KEY=VALUE")]
         var: Vec<String>,
 
-        /// Override concurrency for all phases.
+        /// Override worker thread count for all phases.
+        #[arg(long)]
+        threads: Option<u32>,
+
+        /// Override per-thread in-flight request concurrency for all phases.
         #[arg(long)]
         concurrency: Option<u32>,
 
@@ -125,6 +129,7 @@ async fn main() -> Result<()> {
             rows,
             duration: duration_override,
             var,
+            threads,
             concurrency,
             throttle,
             throttle_sine_amplitude,
@@ -152,17 +157,17 @@ async fn main() -> Result<()> {
                 profile.target.nodes = nodes.clone();
             }
 
-            // --rows sets row_count and populate_operation_count together.
+            // --rows sets partition_count and populate_operation_count together.
             if let Some(n) = rows {
                 profile.vars.insert(
-                    "row_count".to_string(),
+                    "partition_count".to_string(),
                     serde_yaml::Value::Number(serde_yaml::Number::from(n)),
                 );
                 profile.vars.insert(
                     "populate_operation_count".to_string(),
                     serde_yaml::Value::Number(serde_yaml::Number::from(n)),
                 );
-                info!("--rows {n}: set row_count and populate_operation_count to {n}");
+                info!("--rows {n}: set partition_count and populate_operation_count to {n}");
             }
 
             // --duration overrides phase.duration for all duration-mode phases.
@@ -221,6 +226,10 @@ async fn main() -> Result<()> {
                 EspressoClient::Alternator(c) => {
                     schema::apply(c, &profile.tables, &profile.schema).await?
                 }
+                EspressoClient::AlternatorNodeAffinity(cs) => {
+                    let c = cs.first().context("node_affinity has no alternator clients")?;
+                    schema::apply(c, &profile.tables, &profile.schema).await?
+                }
                 EspressoClient::Cql(s) => {
                     schema::apply_cql(
                         s,
@@ -241,13 +250,22 @@ async fn main() -> Result<()> {
                 }
 
                 let mut phase = phase.clone();
+                if let Some(t) = threads {
+                    phase.threads = t.max(1);
+                }
                 if let Some(c) = concurrency {
-                    phase.concurrency = c;
+                    phase.concurrency = c.max(1);
                 }
 
                 info!(
-                    "Starting phase '{}' (mode={:?}, concurrency={}, throttle={:?} ops/s, target_p99_ms={:?})",
-                    phase.name, phase.mode, phase.concurrency, throttle, target_p99_ms
+                    "Starting phase '{}' (mode={:?}, threads={}, concurrency={}, effective_concurrency={}, throttle={:?} ops/s, target_p99_ms={:?})",
+                    phase.name,
+                    phase.mode,
+                    phase.threads,
+                    phase.concurrency,
+                    phase.threads.saturating_mul(phase.concurrency.max(1)),
+                    throttle,
+                    target_p99_ms
                 );
 
                 // Create one Metrics instance; share it between LiveProgress
@@ -313,6 +331,10 @@ async fn main() -> Result<()> {
             let client = build_client(&profile).await?;
             match &client {
                 EspressoClient::Alternator(c) => {
+                    schema::apply(c, &profile.tables, &profile.schema).await?
+                }
+                EspressoClient::AlternatorNodeAffinity(cs) => {
+                    let c = cs.first().context("node_affinity has no alternator clients")?;
                     schema::apply(c, &profile.tables, &profile.schema).await?
                 }
                 EspressoClient::Cql(s) => {
